@@ -12,5 +12,5 @@ wget -O /etc/mysql/my.cnf https://raw.githubusercontent.com/overdigo/wordpress-n
 
 mysqltuner
 ```javascript
-bash <(wget -O - https://raw.githubusercontent.com/VirtuBox/nginx-ee/master/nginx-build.sh)
+bash <(wget -O - https://raw.githubusercontent.com/overdigo/overdigo-alias/master/overdigo-alias.sh)
 ```
