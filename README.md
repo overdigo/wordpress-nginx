@@ -11,20 +11,25 @@ Este é um conjunto de scripts para instalar WordPress com Nginx e PHP-FPM, com 
 
 ## Como usar
 
-### 1. Configuração inicial do servidor (apenas uma vez)
+### 1. instalar o git e clonar o repositório
 
 ```bash
-chmod +x server-setup.sh
-sudo ./server-setup.sh
+apt install git -y
+git clone https://github.com/overdigo/wordpress-nginx
+```
+
+### 2. Configuração inicial do servidor (apenas uma vez)
+
+```bash
+chmod +x server-setup.sh && bash server-setup.sh
 ```
 
 Este script instala e configura Nginx, MySQL e PHP, além de otimizar as configurações para melhor desempenho. Guarde a senha do MySQL root que será exibida ao final da instalação.
 
-### 2. Instalação de sites WordPress (para cada site)
+### 3. Instalação de sites WordPress (para cada site)
 
 ```bash
-chmod +x install-wordpress.sh
-sudo ./install-wordpress.sh
+chmod +x install-wordpress.sh && bash install-wordpress.sh
 ```
 
 Este script pode ser executado várias vezes para instalar diferentes sites WordPress no mesmo servidor. Cada site terá:
