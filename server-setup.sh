@@ -78,10 +78,7 @@ if ! is_installed mysql; then
     DEBIAN_FRONTEND=noninteractive dpkg -i mysql-apt-config_0.8.24-1_all.deb
     apt update
     apt install -y mysql-server
-    
-    # Configuração otimizada do MySQL
-    wget -O /etc/mysql/my.cnf https://raw.githubusercontent.com/overdigo/wordpress-nginx/master/mysql/my.cnf
-    
+  
     # Configura MySQL com senha
     systemctl start mysql
     mysql <<EOF

@@ -51,7 +51,6 @@ server {
         # Default pool for all other requests
         if ($uri !~* "/wp-admin/|wp-login.php") {
             fastcgi_pass php{{PHP_VERSION_NO_DOT}};
-            include fastcgi_params;
         }
     }
     
