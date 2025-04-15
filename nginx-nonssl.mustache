@@ -33,7 +33,7 @@ server {
     error_log /var/log/nginx/{{DOMAIN}}.error.log error;
     
     root {{SITE_ROOT}};
-    index index.php;
+    index index.php index.html index.htm;
 
     # Disable access to sensitive files
     location = /wp-config.php { deny all; }
@@ -47,13 +47,19 @@ server {
     location ~ \.php$ {
         try_files $uri =404;
         include fastcgi_params;
-        
-        # Default pool for all other requests
-        if ($uri !~* "/wp-admin/|wp-login.php") {
-            fastcgi_pass php{{PHP_VERSION_NO_DOT}};
-        }
+        fastcgi_pass php{{PHP_VERSION_NO_DOT}};
     }
     
+    location /wp-admin/ {
+        try_files $uri $uri/ /index.php?$args;
+
+        location ~ \.php$ {
+            include fastcgi_params;
+            fastcgi_pass php{{PHP_VERSION_NO_DOT}}_admin;
+            fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        }
+    }
+
     # Limit access to avoid brute force attack
     location = /wp-login.php {
         limit_req zone=one burst=1 nodelay;

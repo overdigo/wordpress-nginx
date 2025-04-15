@@ -85,6 +85,32 @@ wp core download --locale=pt_BR --allow-root
 wp config create --dbname=$DB_NAME --dbuser=$DB_USER --dbpass=$DB_PASS --allow-root
 wp core install --url="$FULL_URL" --title="$DOMAIN" --admin_user="$WP_ADMIN_USER" --admin_password="$WP_ADMIN_PASS" --admin_email="$ADMIN_EMAIL" --allow-root
 
+# Set permalink structure to /%postname%/
+wp rewrite structure '/%postname%/' --allow-root
+wp rewrite flush --hard --allow-root
+
+# Add custom configurations to wp-config.php
+wp config set WP_MEMORY_LIMIT '256M' --raw --type=constant --allow-root
+wp config set WP_MAX_MEMORY_LIMIT '256M' --raw --type=constant --allow-root
+wp config set CONCATENATE_SCRIPTS 'false' --raw --type=constant --allow-root
+wp config set WP_POST_REVISIONS '10' --raw --type=constant --allow-root
+wp config set MEDIA_TRASH 'true' --raw --type=constant --allow-root
+wp config set EMPTY_TRASH_DAYS '15' --raw --type=constant --allow-root
+wp config set WP_AUTO_UPDATE_CORE 'minor' --raw --type=constant --allow-root
+
+# Disable wp-cron.php in wp-config.php
+wp config set DISABLE_WP_CRON 'true' --raw --type=constant --allow-root
+wp theme update --all --allow-root
+wp plugin deactivate akismet --allow-root
+wp plugin delete akismet --allow-root
+wp plugin deactivate hello --allow-root
+wp plugin delete hello --allow-root
+wp plugin install nginx-helper --activate --allow-root
+wp plugin update --all --allow-root
+
+# Set up a cron job to run WordPress cron tasks every 5 minutes
+(crontab -l -u www-data 2>/dev/null; echo "*/5 * * * * /usr/local/bin/wp cron event run --due-now --path=$SITE_ROOT --allow-root") | crontab -u www-data -
+
 # Configuração para SSL ou não-SSL usando templates
 if [ "$USE_SSL" = true ]; then
     # Cria certificado SSL autoassinado
@@ -107,6 +133,12 @@ nginx -t && systemctl restart nginx
 chown -R www-data:www-data "$SITE_ROOT"
 find "$SITE_ROOT" -type d -exec chmod 755 {} \;
 find "$SITE_ROOT" -type f -exec chmod 644 {} \;
+
+# Generate a random table prefix
+RANDOM_PREFIX=$(openssl rand -base64 4 | tr -dc 'a-z0-9' | cut -c1-6)_
+
+# Update wp-config.php with the new table prefix
+sed -i "s/\$table_prefix = 'wp_';/\$table_prefix = '$RANDOM_PREFIX';/" $SITE_ROOT/wp-config.php
 
 # Informações finais
 echo -e "\nInstalação concluída! Detalhes do site:"
