@@ -13,10 +13,6 @@ upstream php{{PHP_VERSION_NO_DOT}}_admin {
     keepalive 5;
 }
 
-# Rate limiting zones
-limit_req_zone $binary_remote_addr zone=one:10m rate=1r/s;
-limit_req_zone $binary_remote_addr zone=two:10m rate=30r/m;
-
 # Define map variables for WebP and AVIF support
 map $http_accept $webp_suffix {
     default "";
@@ -282,6 +278,31 @@ server {
     }
     
     location ~* "(<|%3C).*script.*(>|%3)" {
+        deny all;
+    }    
+    # Security patterns provided by the user
+    location ~ "(\\|\.\.\.|\.\./|~|`|<|>|\|)" {
+        deny all;
+    }
+    location ~* "(boot\.ini|etc/passwd|self/environ)" {
+        deny all;
+    }
+    location ~* "(thumbs?(_editor|open)?|tim(thumb)?)\.php" {
+        deny all;
+    }
+    location ~* "(\'|\")(.*)(drop|insert|md5|select|union)" {
+        deny all;
+    }
+    location ~* "(https?|ftp|php):/" {
+        deny all;
+    }
+    location ~* "(=\\\'|=\\%27|/\\\'/?)\." {
+        deny all;
+    }
+    location ~ "(\{0\}|\(/\(|\.\.\.|\+\+\+|\\\"\\\")" {
+        deny all;
+    }
+    location ~ "(~|`|<|>|:|;|%|\\|\s|\{|\}|\[|\]|\|)" {
         deny all;
     }
 } 
