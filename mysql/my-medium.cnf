@@ -1,0 +1,69 @@
+[mysqld]
+# Basic Settings
+user = mysql
+pid-file = /var/run/mysqld/mysqld.pid
+socket = /var/run/mysqld/mysqld.sock
+port = 3306
+basedir = /usr
+datadir = /var/lib/mysql
+tmpdir = /tmp
+bind-address = 127.0.0.1
+
+# Medium Server Memory Settings (8-16GB RAM) - WordPress Optimized
+key_buffer_size = 256M
+max_allowed_packet = 128M
+thread_stack = 256K
+thread_cache_size = 24
+max_connections = 300
+table_open_cache = 4000
+table_definition_cache = 2000
+max_heap_table_size = 256M
+tmp_table_size = 256M
+innodb_buffer_pool_size = 6G
+innodb_buffer_pool_instances = 6
+innodb_log_file_size = 768M
+innodb_log_buffer_size = 32M
+innodb_flush_log_at_trx_commit = 2
+innodb_file_per_table = 1
+innodb_flush_method = O_DIRECT
+# Query cache disabled (better for WordPress)
+query_cache_size = 0
+query_cache_type = 0
+
+# MyISAM Settings
+myisam_sort_buffer_size = 128M
+read_buffer_size = 2M
+read_rnd_buffer_size = 2M
+join_buffer_size = 4M
+sort_buffer_size = 4M
+
+# WordPress specific optimizations
+innodb_io_capacity = 600
+innodb_stats_on_metadata = 0
+
+# Security Settings
+local_infile = 0
+skip-symbolic-links = 1
+secure_file_priv = /var/lib/mysql-files
+max_allowed_packet = 128M
+
+# Logging
+log_error = /var/log/mysql/error.log
+slow_query_log = 1
+slow_query_log_file = /var/log/mysql/mysql-slow.log
+long_query_time = 2
+log_queries_not_using_indexes = ON
+
+# InnoDB Settings
+innodb_read_io_threads = 6
+innodb_write_io_threads = 6
+innodb_doublewrite = 1
+innodb_open_files = 1000
+
+[mysqld_safe]
+log-error = /var/log/mysql/error.log
+pid-file = /var/run/mysqld/mysqld.pid
+
+[client]
+port = 3306
+socket = /var/run/mysqld/mysqld.sock 
