@@ -20,6 +20,7 @@ if ! command_exists nginx; then
   echo "Installing Nginx..."
   apt install -y software-properties-common
   add-apt-repository ppa:wordops/nginx-wo -y
+  sleep 1
   apt update
   apt install -y nginx-custom nginx-wo
 fi
@@ -28,8 +29,9 @@ fi
 if ! command_exists php; then
   echo "Installing PHP $PHP_VERSION..."
   add-apt-repository ppa:ondrej/php -y
+  sleep 1
   apt update
-  apt install -y php$PHP_VERSION-fpm php$PHP_VERSION-mysql php$PHP_VERSION-curl php$PHP_VERSION-gd php$PHP_VERSION-mbstring php$PHP_VERSION-xml php$PHP_VERSION-zip php$PHP_VERSION-bcmath php$PHP_VERSION-imagick
+  apt install -y php$PHP_VERSION-fpm php$PHP_VERSION-mysql php$PHP_VERSION-curl php$PHP_VERSION-intl php$PHP_VERSION-gd php$PHP_VERSION-mbstring php$PHP_VERSION-xml php$PHP_VERSION-zip php$PHP_VERSION-bcmath php$PHP_VERSION-imagick
 fi
 
 # Baixa configurações personalizadas do PHP

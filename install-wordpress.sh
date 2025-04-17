@@ -89,17 +89,18 @@ wp core install --url="$FULL_URL" --title="$DOMAIN" --admin_user="$WP_ADMIN_USER
 wp rewrite structure '/%postname%/' --allow-root
 wp rewrite flush --hard --allow-root
 
-# Add custom configurations to wp-config.php
-wp config set WP_MEMORY_LIMIT '256M' --raw --type=constant --allow-root
-wp config set WP_MAX_MEMORY_LIMIT '256M' --raw --type=constant --allow-root
-wp config set CONCATENATE_SCRIPTS 'false' --raw --type=constant --allow-root
-wp config set WP_POST_REVISIONS '10' --raw --type=constant --allow-root
-wp config set MEDIA_TRASH 'true' --raw --type=constant --allow-root
-wp config set EMPTY_TRASH_DAYS '15' --raw --type=constant --allow-root
-wp config set WP_AUTO_UPDATE_CORE 'minor' --raw --type=constant --allow-root
+# Insert configurations above the specified comment in wp-config.php
+sed -i "/\/\* That's all, stop editing! Happy publishing. \*\//i \
+define('WP_MEMORY_LIMIT', '256M');\
+define('WP_MAX_MEMORY_LIMIT', '256M');\
+define('CONCATENATE_SCRIPTS', false);\
+define('WP_POST_REVISIONS', 10);\
+define('MEDIA_TRASH', true);\
+define('EMPTY_TRASH_DAYS', 15);\
+define('WP_AUTO_UPDATE_CORE', 'minor');\
+define ('DISABLE_WP_CRON', true);\
+" $SITE_ROOT/wp-config.php
 
-# Disable wp-cron.php in wp-config.php
-wp config set DISABLE_WP_CRON 'true' --raw --type=constant --allow-root
 wp theme update --all --allow-root
 wp plugin deactivate akismet --allow-root
 wp plugin delete akismet --allow-root
