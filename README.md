@@ -16,6 +16,7 @@ Este é um conjunto de scripts para instalar WordPress com Nginx e PHP-FPM, com 
 ```bash
 apt install git -y
 git clone https://github.com/overdigo/wordpress-nginx
+cd wordpress-nginx
 ```
 
 ### 2. Configuração inicial do servidor (apenas uma vez)
