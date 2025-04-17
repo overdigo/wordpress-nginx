@@ -18,18 +18,26 @@ apt update && apt upgrade -y
 # Install Nginx if not already installed
 if ! command_exists nginx; then
   echo "Installing Nginx..."
-  apt install -y nginx
+  apt install -y software-properties-common
+  add-apt-repository ppa:wordops/nginx-wo -y
+  apt update
+  apt install -y nginx-custom nginx-wo
 fi
 
 # Install PHP if not already installed
 if ! command_exists php; then
   echo "Installing PHP $PHP_VERSION..."
+  add-apt-repository ppa:ondrej/php -y
+  apt update
   apt install -y php$PHP_VERSION-fpm php$PHP_VERSION-mysql php$PHP_VERSION-curl php$PHP_VERSION-gd php$PHP_VERSION-mbstring php$PHP_VERSION-xml php$PHP_VERSION-zip php$PHP_VERSION-bcmath php$PHP_VERSION-imagick
 fi
 
 # Install MySQL if not already installed
 if ! command_exists mysql; then
   echo "Installing MySQL..."
+  wget https://dev.mysql.com/get/mysql-apt-config_0.8.24-1_all.deb
+  DEBIAN_FRONTEND=noninteractive dpkg -i mysql-apt-config_0.8.24-1_all.deb
+  apt update
   apt install -y mysql-server
   
   # Setup MySQL root password
