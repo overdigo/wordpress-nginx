@@ -25,6 +25,9 @@ if ! command_exists nginx; then
   apt install -y nginx-custom nginx-wo
 fi
 
+wget -q -O /tmp/nginx.conf https://raw.githubusercontent.com/overdigo/wordpress-nginx/master/nginx/nginx.conf
+mv /tmp/nginx.conf /etc/nginx/nginx.conf
+
 # Install PHP if not already installed
 if ! command_exists php; then
   echo "Installing PHP $PHP_VERSION..."
