@@ -1,8 +1,8 @@
 upstream php{{PHP_VERSION_NO_DOT}} {
     least_conn;
 
-    server unix:/run/php/php{{PHP_VERSION}}-fpm1.sock;
-    server unix:/run/php/php{{PHP_VERSION}}-fpm2.sock;
+    server unix:/run/php/php{{PHP_VERSION}}-fpm-1.sock;
+    server unix:/run/php/php{{PHP_VERSION}}-fpm-2.sock;
 
     keepalive 5;
 }
