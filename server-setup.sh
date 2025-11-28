@@ -151,14 +151,14 @@ if ! command_exists mysql; then
     # MySQL Installation
     apt install -y debconf-utils
     echo "Choose MySQL version:"
-    echo "1) MySQL 8.0"
-    echo "2) MySQL 5.7"
+    echo "1) MySQL 8.4"
+    echo "2) MySQL 8.0"
     read -p "Enter your choice (1 or 2): " MYSQL_VERSION_CHOICE
 
     if [ "$MYSQL_VERSION_CHOICE" == "1" ]; then
-        echo "mysql-apt-config mysql-apt-config/select-server select mysql-8.0" | debconf-set-selections
+        echo "mysql-apt-config mysql-apt-config/select-server select mysql-8.4" | debconf-set-selections
     elif [ "$MYSQL_VERSION_CHOICE" == "2" ]; then
-        echo "mysql-apt-config mysql-apt-config/select-server select mysql-5.7" | debconf-set-selections
+        echo "mysql-apt-config mysql-apt-config/select-server select mysql-8.0" | debconf-set-selections
     else
         echo "Invalid choice. Exiting."
         exit 1
