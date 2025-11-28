@@ -16,13 +16,51 @@ echo "Updating system..."
 apt update && apt upgrade -y
 
 # Install Nginx if not already installed
-if ! command_exists nginx; then
-  echo "Installing Nginx..."
-  apt install -y software-properties-common
-  add-apt-repository ppa:wordops/nginx-wo -y
-  sleep 1
-  apt update
-  apt install -y nginx-custom nginx-wo
+if ! command_exists nginx && ! command_exists openresty; then
+  # Ask user for Nginx server
+  echo "Choose your Nginx server:"
+  echo "1) Nginx (official repository)"
+  echo "2) Nginx-EE (WordOps)"
+  echo "3) OpenResty"
+  read -p "Enter your choice (1, 2, or 3): " NGINX_CHOICE
+
+  case $NGINX_CHOICE in
+    1)
+      echo "Installing Nginx from official repository..."
+      apt install -y curl gnupg2 ca-certificates lsb-release ubuntu-keyring
+      curl https://nginx.org/keys/nginx_signing.key | gpg --dearmor | tee /usr/share/keyrings/nginx-archive-keyring.gpg >/dev/null
+      echo "deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] http://nginx.org/packages/ubuntu `lsb_release -cs` nginx" | tee /etc/apt/sources.list.d/nginx.list
+      apt update
+      apt install -y nginx
+      WEB_SERVER_SERVICE_NAME="nginx"
+      ;;
+    2)
+      echo "Installing Nginx-EE from WordOps repository..."
+      apt install -y software-properties-common
+      add-apt-repository ppa:wordops/nginx-wo -y
+      sleep 1
+      apt update
+      apt install -y nginx-custom nginx-wo
+      WEB_SERVER_SERVICE_NAME="nginx"
+      ;;
+    3)
+      echo "Installing OpenResty..."
+      apt install -y --no-install-recommends wget gnupg ca-certificates
+      wget -O - https://openresty.org/package/pubkey.gpg | apt-key add -
+      echo "deb http://openresty.org/package/ubuntu $(lsb_release -sc) main" | tee /etc/apt/sources.list.d/openresty.list
+      apt update
+      apt install -y openresty
+      WEB_SERVER_SERVICE_NAME="openresty"
+      # Symlink openresty's nginx to be found by other scripts
+      if [ -f /usr/local/openresty/nginx/sbin/nginx ] && [ ! -f /usr/local/bin/nginx ]; then
+          ln -s /usr/local/openresty/nginx/sbin/nginx /usr/local/bin/nginx
+      fi
+      ;;
+    *)
+      echo "Invalid choice. Exiting."
+      exit 1
+      ;;
+  esac
 fi
 
 wget -q -O /tmp/nginx.conf https://raw.githubusercontent.com/overdigo/wordpress-nginx/master/nginx/nginx.conf
@@ -63,39 +101,111 @@ mv /tmp/sock2.conf /etc/php/${PHP_VERSION}/fpm/pool.d/sock2.conf
 mv /tmp/admin.conf /etc/php/${PHP_VERSION}/fpm/pool.d/admin.conf
 mv /tmp/tcp.conf.disable /etc/php/${PHP_VERSION}/fpm/pool.d/tcp.conf.disable
 
-# Install MySQL if not already installed
-if ! command_exists mysql; then
-  echo "Installing MySQL..."
-  wget https://dev.mysql.com/get/mysql-apt-config_0.8.24-1_all.deb
-  DEBIAN_FRONTEND=noninteractive dpkg -i mysql-apt-config_0.8.24-1_all.deb
-  apt update
-  apt install -y mysql-server
-  
-  # Setup MySQL root password
-  mysql --execute="ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$MYSQL_ROOT_PASSWORD'; FLUSH PRIVILEGES;"
-fi
+WEB_SERVER_SERVICE_NAME="" # This will be set to 'nginx' or 'openresty'
+DB_SERVICE_NAME="" # This will be set to 'mysql' or 'mariadb' if a DB is installed.
 
-# Function to detect system memory and choose appropriate MySQL config
-setup_mysql_config() {
+# Function to detect system memory and choose appropriate DB config
+setup_db_config() {
+  DB_TYPE=$1 # "mysql" or "mariadb"
+  
   # Get total memory in MB
   total_mem=$(free -m | awk '/^Mem:/{print $2}')
   
   echo "System has $total_mem MB of RAM"
   
+  local config_file
+  local dest_config_file
   if [ $total_mem -lt 4096 ]; then
-    echo "Using small MySQL configuration (optimized for systems with less than 4GB RAM)"
-    cp mysql/my-small.cnf /etc/mysql/mysql.conf.d/my-small.cnf
+    echo "Using small DB configuration (optimized for systems with less than 4GB RAM)"
+    config_file="mysql/my-small.cnf"
+    dest_config_file="/etc/mysql/conf.d/my-small.cnf"
   elif [ $total_mem -lt 16384 ]; then
-    echo "Using medium MySQL configuration (optimized for systems with 4-16GB RAM)"
-    cp mysql/my-medium.cnf /etc/mysql/mysql.conf.d/my-medium.cnf
+    echo "Using medium DB configuration (optimized for systems with 4-16GB RAM)"
+    config_file="mysql/my-medium.cnf"
+    dest_config_file="/etc/mysql/conf.d/my-medium.cnf"
   else
-    echo "Using large MySQL configuration (optimized for systems with more than 16GB RAM)"
-    cp mysql/my-large.cnf /etc/mysql/mysql.conf.d/my-large.cnf
+    echo "Using large DB configuration (optimized for systems with more than 16GB RAM)"
+    config_file="mysql/my-large.cnf"
+    dest_config_file="/etc/mysql/conf.d/my-large.cnf"
   fi
-  
-  # Restart MySQL to apply new configuration
-  systemctl restart mysql
+
+  # For MySQL 8.0+, query_cache is removed. We remove it for all for simplicity and compatibility.
+  echo "Applying DB configuration and removing deprecated query_cache settings..."
+  # Create the directory if it doesn't exist
+  mkdir -p "$(dirname "$dest_config_file")"
+  sed '/query_cache/d' "$config_file" > "$dest_config_file"
+
+  # Restart DB to apply new configuration
+  echo "Restarting $DB_TYPE..."
+  systemctl restart $DB_TYPE
 }
+
+# Install Database if not already installed
+if ! command_exists mysql; then
+  echo "Choose your database server:"
+  echo "1) MySQL"
+  echo "2) MariaDB"
+  read -p "Enter your choice (1 or 2): " DB_CHOICE
+
+  if [ "$DB_CHOICE" == "1" ]; then
+    # MySQL Installation
+    apt install -y debconf-utils
+    echo "Choose MySQL version:"
+    echo "1) MySQL 8.0"
+    echo "2) MySQL 5.7"
+    read -p "Enter your choice (1 or 2): " MYSQL_VERSION_CHOICE
+
+    if [ "$MYSQL_VERSION_CHOICE" == "1" ]; then
+        echo "mysql-apt-config mysql-apt-config/select-server select mysql-8.0" | debconf-set-selections
+    elif [ "$MYSQL_VERSION_CHOICE" == "2" ]; then
+        echo "mysql-apt-config mysql-apt-config/select-server select mysql-5.7" | debconf-set-selections
+    else
+        echo "Invalid choice. Exiting."
+        exit 1
+    fi
+
+    echo "Installing MySQL..."
+    wget -q https://dev.mysql.com/get/mysql-apt-config_0.8.24-1_all.deb
+    DEBIAN_FRONTEND=noninteractive dpkg -i mysql-apt-config_0.8.24-1_all.deb
+    apt update
+    apt install -y mysql-server
+    
+    # Setup MySQL root password
+    mysql --execute="ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$MYSQL_ROOT_PASSWORD'; FLUSH PRIVILEGES;"
+    
+    DB_SERVICE_NAME="mysql"
+
+  elif [ "$DB_CHOICE" == "2" ]; then
+    # MariaDB Installation
+    echo "Choose MariaDB LTS version:"
+    echo "1) 10.11"
+    echo "2) 10.6"
+    echo "3) 10.5"
+    read -p "Enter your choice (1, 2, or 3): " MARIADB_VERSION_CHOICE
+
+    case $MARIADB_VERSION_CHOICE in
+        1) MARIADB_VERSION="10.11" ;;
+        2) MARIADB_VERSION="10.6" ;;
+        3) MARIADB_VERSION="10.5" ;;
+        *) echo "Invalid choice. Exiting."; exit 1 ;;
+    esac
+
+    echo "Installing MariaDB $MARIADB_VERSION..."
+    apt install -y apt-transport-https curl
+    curl -o /etc/apt/trusted.gpg.d/mariadb_release_signing_key.asc 'https://mariadb.org/mariadb_release_signing_key.asc'
+    sh -c "echo 'deb https://mirrors.xtom.de/mariadb/repo/$MARIADB_VERSION/ubuntu `lsb_release -cs` main' > /etc/apt/sources.list.d/mariadb.list"
+    apt update
+    apt install -y mariadb-server
+    
+    # Setup MariaDB root password
+    mysql --execute="ALTER USER 'root'@'localhost' IDENTIFIED BY '$MYSQL_ROOT_PASSWORD'; FLUSH PRIVILEGES;"
+
+    DB_SERVICE_NAME="mariadb"
+  else
+    echo "Invalid choice. Exiting."
+    exit 1
+  fi
+fi
 
 # Install WP-CLI if not already installed
 if ! command_exists wp; then
@@ -105,14 +215,24 @@ if ! command_exists wp; then
   mv wp-cli.phar /usr/local/bin/wp
 fi
 
-# Apply appropriate MySQL configuration based on system memory
-echo "Configuring MySQL..."
-setup_mysql_config
+# Apply appropriate DB configuration based on system memory
+if [ -n "$DB_SERVICE_NAME" ]; then
+  echo "Configuring Database..."
+  setup_db_config "$DB_SERVICE_NAME"
+fi
 
 # Restart services
 systemctl restart php$PHP_VERSION-fpm
-systemctl restart nginx
-systemctl restart mysql
+if [ -n "$WEB_SERVER_SERVICE_NAME" ]; then
+  systemctl restart "$WEB_SERVER_SERVICE_NAME"
+else
+  # If web server was not installed by this script, try restarting nginx by default
+  if command_exists nginx; then
+    systemctl restart nginx
+  elif command_exists openresty; then
+    systemctl restart openresty
+  fi
+fi
 
 # Final message
 {
