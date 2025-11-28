@@ -29,7 +29,7 @@ wget -q -O /tmp/nginx.conf https://raw.githubusercontent.com/overdigo/wordpress-
 mv /tmp/nginx.conf /etc/nginx/nginx.conf | yes
 mkdir -p /etc/nginx/sites-enabled/
 mkdir -p /etc/nginx/sites-available/
-ln -s /etc/nginx/sites-available/* /etc/nginx/sites-enabled/
+mkdir -p /etc/nginx/snippets/
 
 # Install PHP if not already installed
 if ! command_exists php; then
