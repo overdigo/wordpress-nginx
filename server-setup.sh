@@ -182,8 +182,8 @@ if ! command_exists mysql; then
     fi
 
     echo "Installing MySQL..."
-    wget -q https://dev.mysql.com/get/mysql-apt-config_0.8.24-1_all.deb
-    DEBIAN_FRONTEND=noninteractive dpkg -i mysql-apt-config_0.8.24-1_all.deb
+    wget -q https://dev.mysql.com/get/mysql-apt-config_0.8.34-1_all.deb
+    DEBIAN_FRONTEND=noninteractive dpkg -i mysql-apt-config_0.8.34-1_all.deb
     apt-key adv --keyserver keyserver.ubuntu.com --recv-keys B7B3B788A8D3785C
     apt update
     apt install -y mysql-server
