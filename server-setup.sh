@@ -78,11 +78,6 @@ mv /tmp/nginx.conf /etc/nginx/nginx.conf | yes
 mv /tmp/fastcgi.conf /etc/nginx/fastcgi.conf | yes
 mv /tmp/fastcgi-php.conf /etc/nginx/snippets/fastcgi-php.conf | yes
 
-mv /tmp/nginx.conf /etc/nginx/nginx.conf | yes
-mkdir -p /etc/nginx/sites-enabled/
-mkdir -p /etc/nginx/sites-available/
-mkdir -p /etc/nginx/snippets/
-
 # Install PHP if not already installed
 if ! command_exists php; then
   echo "Installing PHP $PHP_VERSION..."
