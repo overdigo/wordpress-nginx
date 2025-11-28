@@ -160,6 +160,7 @@ echo "Email Administrador: $ADMIN_EMAIL"
 echo "Versão do PHP: $PHP_VERSION"
 echo "Pool de admin configurado com limites maiores para wp-admin" 
 # Final information
+>> ~/.iw/wp.txt 
 {
   echo -e "\nInstallation completed! Site details:"
   echo "Domain: $DOMAIN"

@@ -1,5 +1,10 @@
 #!/bin/bash
 
+if (( EUID != 0 )); then
+    echo "Erro: Este script deve ser executado como root ou sudo!" >&2
+    exit 100
+fi
+
 # Function to check if a command exists
 command_exists() {
   command -v "$1" &> /dev/null
@@ -63,8 +68,16 @@ if ! command_exists nginx && ! command_exists openresty; then
   esac
 fi
 
+mkdir -p /etc/nginx/sites-enabled/
+mkdir -p /etc/nginx/sites-available/
+mkdir -p /etc/nginx/snippets/
 wget -q -O /tmp/nginx.conf https://raw.githubusercontent.com/overdigo/wordpress-nginx/master/nginx/nginx.conf
-mv /tmp/nginx.conf /etc/nginx/nginx.conf
+wget -q -O /tmp/fastcgi.conf https://raw.githubusercontent.com/overdigo/wordpress-nginx/master/nginx/fastcgi.conf
+wget -q -O /tmp/fastcgi-php.conf https://raw.githubusercontent.com/overdigo/wordpress-nginx/blob/master/nginx/snippets/fastcgi-php.conf
+mv /tmp/nginx.conf /etc/nginx/nginx.conf | yes
+mv /tmp/fastcgi.conf /etc/nginx/fastcgi.conf | yes
+mv /tmp/fastcgi-php.conf /etc/nginx/snippets/fastcgi-php.conf | yes
+
 
 # Install PHP if not already installed
 if ! command_exists php; then
@@ -72,8 +85,8 @@ if ! command_exists php; then
   add-apt-repository ppa:ondrej/php -y
   sleep 1
   apt update
-  apt install -y php$PHP_VERSION-fpm php$PHP_VERSION-mysql php$PHP_VERSION-curl php$PHP_VERSION-intl php$PHP_VERSION-gd php$PHP_VERSION-mbstring php$PHP_VERSION-xml php$PHP_VERSION-zip php$PHP_VERSION-bcmath php$PHP_VERSION-imagick
-fi
+  apt install php$PHP_VERSION-{fpm,mysql,curl,gd,common,xml,zip,xsl,bcmath,mbstring,imagick,cli,opcache,redis,intl,yaml}
+  fi
 
 # Baixa configurações personalizadas do PHP
 echo "Baixando configurações do PHP..."
@@ -167,6 +180,7 @@ if ! command_exists mysql; then
     echo "Installing MySQL..."
     wget -q https://dev.mysql.com/get/mysql-apt-config_0.8.24-1_all.deb
     DEBIAN_FRONTEND=noninteractive dpkg -i mysql-apt-config_0.8.24-1_all.deb
+    apt-key adv --keyserver keyserver.ubuntu.com --recv-keys B7B3B788A8D3785C
     apt update
     apt install -y mysql-server
     
@@ -242,6 +256,7 @@ fi
   echo "Remember to save your MySQL root password!"
 
   # Security notice
+  >> ~/.iw/server.txt
   echo -e "\nSecurity Notice:"
   echo "- MySQL is configured to only accept connections from localhost"
   echo "- Remember to secure your server with a firewall (e.g., UFW)"
