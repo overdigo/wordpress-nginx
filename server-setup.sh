@@ -78,6 +78,10 @@ mv /tmp/nginx.conf /etc/nginx/nginx.conf | yes
 mv /tmp/fastcgi.conf /etc/nginx/fastcgi.conf | yes
 mv /tmp/fastcgi-php.conf /etc/nginx/snippets/fastcgi-php.conf | yes
 
+mv /tmp/nginx.conf /etc/nginx/nginx.conf | yes
+mkdir -p /etc/nginx/sites-enabled/
+mkdir -p /etc/nginx/sites-available/
+mkdir -p /etc/nginx/snippets/
 
 # Install PHP if not already installed
 if ! command_exists php; then
@@ -86,7 +90,7 @@ if ! command_exists php; then
   sleep 1
   apt update
   apt install php$PHP_VERSION-{fpm,mysql,curl,gd,common,xml,zip,xsl,bcmath,mbstring,imagick,cli,opcache,redis,intl,yaml}
-  fi
+fi
 
 # Baixa configurações personalizadas do PHP
 echo "Baixando configurações do PHP..."
