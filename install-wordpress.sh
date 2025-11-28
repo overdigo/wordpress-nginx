@@ -159,3 +159,23 @@ echo "Senha WordPress: $WP_ADMIN_PASS"
 echo "Email Administrador: $ADMIN_EMAIL"
 echo "Versão do PHP: $PHP_VERSION"
 echo "Pool de admin configurado com limites maiores para wp-admin" 
+# Final information
+{
+  echo -e "\nInstallation completed! Site details:"
+  echo "Domain: $DOMAIN"
+  if [ "$USE_SSL" = true ]; then
+      echo "Site URL: $FULL_URL (SSL enabled)"
+      echo "Self-signed SSL certificate configured (accept browser warning)"
+  else
+      echo "Site URL: $FULL_URL (no SSL)"
+  fi
+  echo "Site path: $SITE_ROOT"
+  echo "Database: $DB_NAME"
+  echo "DB User: $DB_USER"
+  echo "DB Password: $DB_PASS"
+  echo "WordPress Admin Username: $WP_ADMIN_USER"
+  echo "WordPress Admin Password: $WP_ADMIN_PASS"
+  echo "Admin Email: $ADMIN_EMAIL"
+  echo "PHP Version: $PHP_VERSION"
+  echo -e "\nYou can now access your WordPress admin at: $FULL_URL/wp-admin/"
+} | tee ~/.iw/wp.txt 

@@ -115,13 +115,54 @@ systemctl restart nginx
 systemctl restart mysql
 
 # Final message
-echo -e "\nSetup completed successfully!"
-echo "PHP version: $PHP_VERSION"
-echo "MySQL root password: $MYSQL_ROOT_PASSWORD"
-echo "Remember to save your MySQL root password!"
+{
+  echo -e "\nSetup completed successfully!"
+  echo "PHP version: $PHP_VERSION"
+  echo "MySQL root password: $MYSQL_ROOT_PASSWORD"
+  echo "Remember to save your MySQL root password!"
+
+  # Security notice
+  echo -e "\nSecurity Notice:"
+  echo "- MySQL is configured to only accept connections from localhost"
+  echo "- Remember to secure your server with a firewall (e.g., UFW)"
+  echo "- Consider installing fail2ban for additional security"
+} | tee ~/.iw/server.txt
 
 # Security notice
 echo -e "\nSecurity Notice:"
 echo "- MySQL is configured to only accept connections from localhost"
 echo "- Remember to secure your server with a firewall (e.g., UFW)"
-echo "- Consider installing fail2ban for additional security" 
+echo "- Consider installing fail2ban for additional security"
+
+# Apply sysctl settings for performance and security
+cat <<EOF >> /etc/sysctl.d/99-sysctl.conf
+# Increase the maximum number of open file descriptors
+fs.file-max = 2097152
+
+# Increase the maximum number of incoming connections
+net.core.somaxconn = 65535
+
+# Enable TCP SYN cookies to protect against SYN flood attacks
+net.ipv4.tcp_syncookies = 1
+
+# Adjust TCP buffer sizes for better throughput
+net.core.rmem_max = 16777216
+net.core.wmem_max = 16777216
+net.ipv4.tcp_rmem = 4096 87380 16777216
+net.ipv4.tcp_wmem = 4096 65536 16777216
+
+# Disable IP source routing
+net.ipv4.conf.all.accept_source_route = 0
+net.ipv4.conf.default.accept_source_route = 0
+
+# Enable IP spoofing protection
+net.ipv4.conf.all.rp_filter = 1
+net.ipv4.conf.default.rp_filter = 1
+
+# Disable ICMP redirects
+net.ipv4.conf.all.accept_redirects = 0
+net.ipv4.conf.default.accept_redirects = 0
+EOF
+
+# Apply the changes
+sysctl -p 
