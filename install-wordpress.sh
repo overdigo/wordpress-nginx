@@ -112,21 +112,19 @@ wp plugin update --all --allow-root
 # Set up a cron job to run WordPress cron tasks every 5 minutes
 (crontab -l -u www-data 2>/dev/null; echo "*/5 * * * * /usr/local/bin/wp cron event run --due-now --path=$SITE_ROOT --allow-root") | crontab -u www-data -
 
-# Configuração para SSL ou não-SSL usando templates
-if [ "$USE_SSL" = true ]; then
-    # Cria certificado SSL autoassinado
-    mkdir -p /etc/nginx/ssl
+# Configuração do Nginx (Sempre usa SSL com o novo template)
+# Cria certificado SSL autoassinado se não existir
+mkdir -p /etc/nginx/ssl
+if [ ! -f "/etc/nginx/ssl/$DOMAIN.crt" ]; then
+    echo "Gerando certificado SSL autoassinado para $DOMAIN..."
     openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
       -keyout /etc/nginx/ssl/$DOMAIN.key \
       -out /etc/nginx/ssl/$DOMAIN.crt \
       -subj "/CN=$DOMAIN"
-      
-    # Renderiza o template com SSL
-    render_template "$SCRIPT_DIR/nginx-ssl.mustache" "/etc/nginx/sites-available/$DOMAIN"
-else
-    # Renderiza o template sem SSL
-    render_template "$SCRIPT_DIR/nginx-nonssl.mustache" "/etc/nginx/sites-available/$DOMAIN"
 fi
+      
+# Renderiza o template (sempre usa nginx.mustache)
+render_template "$SCRIPT_DIR/nginx/nginx.mustache" "/etc/nginx/sites-available/$DOMAIN"
 
 # Aplica configuração
 ln -sf /etc/nginx/sites-available/$DOMAIN /etc/nginx/sites-enabled/
@@ -160,7 +158,7 @@ echo "Email Administrador: $ADMIN_EMAIL"
 echo "Versão do PHP: $PHP_VERSION"
 echo "Pool de admin configurado com limites maiores para wp-admin" 
 # Final information
->> ~/.iw/wp.txt 
+mkdir -p ~/.iw ; >> ~/.iw/wp.txt 
 {
   echo -e "\nInstallation completed! Site details:"
   echo "Domain: $DOMAIN"

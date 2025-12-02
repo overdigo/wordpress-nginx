@@ -5,6 +5,10 @@ if (( EUID != 0 )); then
     exit 100
 fi
 
+timedatectl set-timezone America/Sao_Paulo
+
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
+
 # Function to check if a command exists
 command_exists() {
   command -v "$1" &> /dev/null
@@ -12,9 +16,12 @@ command_exists() {
 
 # Ask user for PHP version
 read -p "PHP version to install (e.g., 8.1): " PHP_VERSION
+PHP_VERSION_NO_DOT=${PHP_VERSION//./}
 
 # Generate a random MySQL root password
 MYSQL_ROOT_PASSWORD=$(openssl rand -base64 12)
+
+export DEBIAN_FRONTEND=noninteractive
 
 # Update the system
 echo "Updating system..."
@@ -56,9 +63,20 @@ if ! command_exists nginx && ! command_exists openresty; then
       apt update
       apt install -y openresty
       WEB_SERVER_SERVICE_NAME="openresty"
-      # Symlink openresty's nginx to be found by other scripts
-      if [ -f /usr/local/openresty/nginx/sbin/nginx ] && [ ! -f /usr/local/bin/nginx ]; then
-          ln -s /usr/local/openresty/nginx/sbin/nginx /usr/local/bin/nginx
+      
+      echo "Moving OpenResty's nginx folder to /etc/nginx..."                                                                                
+      rm -rf /etc/nginx                                                                                                                      
+      mv /usr/local/openresty/nginx /etc/nginx
+
+      # Update nginx symlink
+      if [ -f /etc/nginx/sbin/nginx ] && [ ! -f /usr/local/bin/nginx ]; then                                                                 
+          ln -s /etc/nginx/sbin/nginx /usr/local/bin/nginx                                                                                   
+      fi
+
+      # Update openresty.service file
+      if [ -f /lib/systemd/system/openresty.service ]; then
+        sed -i 's|/usr/local/openresty/nginx|/etc/nginx|g' /lib/systemd/system/openresty.service
+        systemctl daemon-reload
       fi
       ;;
     *)
@@ -74,14 +92,9 @@ mkdir -p /etc/nginx/snippets/
 wget -q -O /tmp/nginx.conf https://raw.githubusercontent.com/overdigo/wordpress-nginx/master/nginx/nginx.conf
 wget -q -O /tmp/fastcgi.conf https://raw.githubusercontent.com/overdigo/wordpress-nginx/master/nginx/fastcgi.conf
 wget -q -O /tmp/fastcgi-php.conf https://raw.githubusercontent.com/overdigo/wordpress-nginx/blob/master/nginx/snippets/fastcgi-php.conf
-mv /tmp/nginx.conf /etc/nginx/nginx.conf | yes
-mv /tmp/fastcgi.conf /etc/nginx/fastcgi.conf | yes
-mv /tmp/fastcgi-php.conf /etc/nginx/snippets/fastcgi-php.conf | yes
-
-mv /tmp/nginx.conf /etc/nginx/nginx.conf | yes
-mkdir -p /etc/nginx/sites-enabled/
-mkdir -p /etc/nginx/sites-available/
-mkdir -p /etc/nginx/snippets/
+mv -f /tmp/nginx.conf /etc/nginx/nginx.conf
+mv -f /tmp/fastcgi.conf /etc/nginx/fastcgi.conf
+mv -f /tmp/fastcgi-php.conf /etc/nginx/snippets/fastcgi-php.conf
 
 # Install PHP if not already installed
 if ! command_exists php; then
@@ -89,17 +102,35 @@ if ! command_exists php; then
   add-apt-repository ppa:ondrej/php -y
   sleep 1
   apt update
-  apt install php$PHP_VERSION-{fpm,mysql,curl,gd,common,xml,zip,xsl,bcmath,mbstring,imagick,cli,opcache,redis,intl,yaml}
+  
+  PHP_PACKAGES="php${PHP_VERSION}-fpm php${PHP_VERSION}-mysql php${PHP_VERSION}-curl php${PHP_VERSION}-gd php${PHP_VERSION}-common php${PHP_VERSION}-xml php${PHP_VERSION}-zip php${PHP_VERSION}-xsl php${PHP_VERSION}-bcmath php${PHP_VERSION}-mbstring php${PHP_VERSION}-imagick php${PHP_VERSION}-cli php${PHP_VERSION}-opcache php${PHP_VERSION}-redis php${PHP_VERSION}-intl php${PHP_VERSION}-yaml"
+
+  if [ "$PHP_VERSION" == "8.5" ]; then
+    PHP_PACKAGES=$(echo "$PHP_PACKAGES" | sed "s/php8.5-opcache//")
+  fi
+
+  apt-get install -y --ignore-missing $PHP_PACKAGES
 fi
 
-# Baixa configurações personalizadas do PHP
-echo "Baixando configurações do PHP..."
-wget -q -O /tmp/php-fpm.conf https://raw.githubusercontent.com/overdigo/wordpress-nginx/master/php/${PHP_VERSION}/fpm/php-fpm.conf
-wget -q -O /tmp/php.ini https://raw.githubusercontent.com/overdigo/wordpress-nginx/master/php/${PHP_VERSION}/fpm/php.ini
-wget -q -O /tmp/sock1.conf https://raw.githubusercontent.com/overdigo/wordpress-nginx/master/php/${PHP_VERSION}/fpm/pool.d/sock1.conf
-wget -q -O /tmp/sock2.conf https://raw.githubusercontent.com/overdigo/wordpress-nginx/master/php/${PHP_VERSION}/fpm/pool.d/sock2.conf
-wget -q -O /tmp/admin.conf https://raw.githubusercontent.com/overdigo/wordpress-nginx/master/php/${PHP_VERSION}/fpm/pool.d/admin.conf
-wget -q -O /tmp/tcp.conf.disable https://raw.githubusercontent.com/overdigo/wordpress-nginx/master/php/${PHP_VERSION}/fpm/pool.d/tcp.conf.disable
+# Gera configurações personalizadas do PHP a partir dos templates locais
+echo "Gerando configurações do PHP..."
+
+# Função para processar templates mustache
+process_mustache() {
+    local input=$1
+    local output=$2
+    sed -e "s/{{PHP_VERSION}}/$PHP_VERSION/g" \
+        -e "s/{{PHP_VERSION_NO_DOT}}/$PHP_VERSION_NO_DOT/g" \
+        "$input" > "$output"
+}
+
+process_mustache "$SCRIPT_DIR/php/php-fpm.mustache" "/tmp/php-fpm.conf"
+process_mustache "$SCRIPT_DIR/php/php-admin.mustache" "/tmp/admin.conf"
+process_mustache "$SCRIPT_DIR/php/get-sock-1.mustache" "/tmp/sock1.conf"
+process_mustache "$SCRIPT_DIR/php/get-sock-2.mustache" "/tmp/sock2.conf"
+process_mustache "$SCRIPT_DIR/php/sock-other.mustache" "/tmp/sock-other.conf"
+
+cp "$SCRIPT_DIR/php/php.ini" "/tmp/php.ini"
 
 # Faz backup das configurações originais
 echo "Fazendo backup das configurações padrão..."
@@ -116,7 +147,7 @@ mv /tmp/php.ini /etc/php/${PHP_VERSION}/cli/php.ini  # Aplica também para CLI
 mv /tmp/sock1.conf /etc/php/${PHP_VERSION}/fpm/pool.d/sock1.conf
 mv /tmp/sock2.conf /etc/php/${PHP_VERSION}/fpm/pool.d/sock2.conf
 mv /tmp/admin.conf /etc/php/${PHP_VERSION}/fpm/pool.d/admin.conf
-mv /tmp/tcp.conf.disable /etc/php/${PHP_VERSION}/fpm/pool.d/tcp.conf.disable
+mv /tmp/sock-other.conf /etc/php/${PHP_VERSION}/fpm/pool.d/sock-other.conf
 
 WEB_SERVER_SERVICE_NAME="" # This will be set to 'nginx' or 'openresty'
 DB_SERVICE_NAME="" # This will be set to 'mysql' or 'mariadb' if a DB is installed.
@@ -193,6 +224,26 @@ if ! command_exists mysql; then
     
     DB_SERVICE_NAME="mysql"
 
+    # Cria o diretório de override se não existir
+mkdir -p /etc/systemd/system/mysql.service.d
+
+# Escreve o conteúdo do override no arquivo (sem indentação no conteúdo)
+cat <<EOF > /etc/systemd/system/mysql.service.d/override.conf
+[Service]
+LimitNOFILE=131072
+LimitNOFILESoft=131072
+Nice=-5
+LimitCore=1G
+Environment="LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2"
+Environment="TZ=America/Sao_Paulo"
+EOF
+
+# Recarrega as configurações do systemd para aplicar alterações
+systemctl daemon-reload
+
+# Reinicia o serviço para aplicar as mudanças
+systemctl restart mysql.service
+
   elif [ "$DB_CHOICE" == "2" ]; then
     # MariaDB Installation
     echo "Choose MariaDB LTS version:"
@@ -219,6 +270,25 @@ if ! command_exists mysql; then
     mysql --execute="ALTER USER 'root'@'localhost' IDENTIFIED BY '$MYSQL_ROOT_PASSWORD'; FLUSH PRIVILEGES;"
 
     DB_SERVICE_NAME="mariadb"
+    # Cria o diretório de override se não existir
+mkdir -p /etc/systemd/system/mariadb.service.d
+
+# Escreve o conteúdo do override no arquivo (sem indentação no conteúdo)
+cat <<EOF > /etc/systemd/system/mariadb.service.d/override.conf
+[Service]
+LimitNOFILE=131072
+LimitNOFILESoft=131072
+Nice=-5
+LimitCore=1G
+Environment="LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2"
+Environment="TZ=America/Sao_Paulo"
+EOF
+
+# Recarrega as configurações do systemd para aplicar alterações
+systemctl daemon-reload
+
+# Reinicia o serviço para aplicar as mudanças
+systemctl restart mariadb.service
   else
     echo "Invalid choice. Exiting."
     exit 1
@@ -251,7 +321,7 @@ else
     systemctl restart openresty
   fi
 fi
-
+mkdir -p ~/.iw ; >> ~/.iw/server.txt
 # Final message
 {
   echo -e "\nSetup completed successfully!"
@@ -259,8 +329,7 @@ fi
   echo "MySQL root password: $MYSQL_ROOT_PASSWORD"
   echo "Remember to save your MySQL root password!"
 
-  # Security notice
-  >> ~/.iw/server.txt
+  # Security notice  
   echo -e "\nSecurity Notice:"
   echo "- MySQL is configured to only accept connections from localhost"
   echo "- Remember to secure your server with a firewall (e.g., UFW)"
