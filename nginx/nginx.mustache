@@ -339,3 +339,32 @@ server {
         try_files $uri $uri/ /index.php?$query_string;
     }
 }
+    # subdomains redirect
+    server {
+        listen                  443 ssl;
+        listen                  [::]:443 ssl;
+        server_name             *.{{DOMAIN}};
+
+        http2 on;
+
+        # SSL
+        ssl_certificate /etc/nginx/ssl/{{DOMAIN}}.crt;
+        ssl_certificate_key /etc/nginx/ssl/{{DOMAIN}}.key;
+        return 301 https://{{DOMAIN}};$request_uri;
+    }
+
+    # HTTP redirect
+    server {
+        listen      80;
+        listen      [::]:80;
+        server_name .{{DOMAIN}};
+
+        # ACME-challenge
+        location ^~ /.well-known/acme-challenge/ {
+            root /var/www/_letsencrypt;
+        }
+
+        location / {
+            return 301 https://{{DOMAIN}};$request_uri;
+        }
+    }
