@@ -13,6 +13,7 @@ render_template() {
     sed -i "s/{{PHP_VERSION}}/$PHP_VERSION/g" "/tmp/template.tmp"
     sed -i "s/{{PHP_VERSION_NO_DOT}}/${PHP_VERSION/.}/g" "/tmp/template.tmp"
     sed -i "s|{{SITE_ROOT}}|$SITE_ROOT|g" "/tmp/template.tmp"
+    sed -i "s|{{SECURE_DIR}}|$SECURE_DIR_NAME|g" "/tmp/template.tmp"
     
     # Move para o destino final
     mv "/tmp/template.tmp" "$output"
@@ -110,16 +111,15 @@ wp config create --dbname=$DB_NAME --dbuser=$DB_USER --dbpass=$DB_PASS --allow-r
 wp core install --url="$FULL_URL" --title="$DOMAIN" --admin_user="$WP_ADMIN_USER" --admin_password="$WP_ADMIN_PASS" --admin_email="$ADMIN_EMAIL" --allow-root
 
 # Insert configurations above the specified comment in wp-config.php
-sed -i "/\/\* That's all, stop editing! Happy publishing. \*\//i \
-define('WP_MEMORY_LIMIT', '256M');\
-define('WP_MAX_MEMORY_LIMIT', '256M');\
-define('CONCATENATE_SCRIPTS', false);\
-define('WP_POST_REVISIONS', 10);\
-define('MEDIA_TRASH', true);\
-define('EMPTY_TRASH_DAYS', 15);\
-define('WP_AUTO_UPDATE_CORE', 'minor');\
-define ('DISABLE_WP_CRON', true);\
-" $SITE_ROOT/wp-config.php
+sed -i "/\/\* That's all, stop editing! Happy publishing. \*\//i \\
+define('WP_MEMORY_LIMIT', '256M');\\
+define('WP_MAX_MEMORY_LIMIT', '256M');\\
+define('CONCATENATE_SCRIPTS', false);\\
+define('WP_POST_REVISIONS', 10);\\
+define('MEDIA_TRASH', true);\\
+define('EMPTY_TRASH_DAYS', 15);\\
+define('WP_AUTO_UPDATE_CORE', 'minor');\\
+define('DISABLE_WP_CRON', true);" $SITE_ROOT/wp-config.php
 
 wp theme update --all --allow-root
 wp plugin deactivate akismet --allow-root
@@ -153,15 +153,50 @@ render_template "$SCRIPT_DIR/nginx/nginx.mustache" "/etc/nginx/sites-available/$
 # Aplica configuração
 ln -sf /etc/nginx/sites-available/$DOMAIN /etc/nginx/sites-enabled/
 nginx -t && systemctl restart nginx
-chown -R www-data:www-data "$SITE_ROOT"
-find "$SITE_ROOT" -type d -exec chmod 755 {} \;
-find "$SITE_ROOT" -type f -exec chmod 644 {} \;
 
 # Generate a random table prefix
 RANDOM_PREFIX=$(openssl rand -base64 4 | tr -dc 'a-z0-9' | cut -c1-6)_
 
 # Update wp-config.php with the new table prefix
 sed -i "s/\$table_prefix = 'wp_';/\$table_prefix = '$RANDOM_PREFIX';/" $SITE_ROOT/wp-config.php
+
+# ============================================================================
+# SECURE TOOLS DIRECTORY SETUP
+# ============================================================================
+
+# Generate random credentials and folder name
+SECURE_DIR_NAME=$(openssl rand -hex 16)
+SECURE_USER=$(tr -dc 'a-z' < /dev/urandom | head -c 6)
+SECURE_PASS=$(tr -dc 'a-zA-Z0-9' < /dev/urandom | head -c 12)
+
+echo "Configurando diretório seguro de ferramentas..."
+echo "Diretório: $SECURE_DIR_NAME"
+
+# Create directory
+mkdir -p "$SITE_ROOT/$SECURE_DIR_NAME"
+
+# Download tools
+echo "Baixando Adminer..."
+wget -q -O "$SITE_ROOT/$SECURE_DIR_NAME/adminer.php" https://www.adminer.org/latest-mysql-en.php
+
+echo "Baixando Opcache GUI..."
+wget -q -O "$SITE_ROOT/$SECURE_DIR_NAME/opcache.php" https://raw.githubusercontent.com/amnuts/opcache-gui/master/index.php
+
+# Set permissions
+chown -R www-data:www-data "$SITE_ROOT"
+find "$SITE_ROOT" -type d -exec chmod 755 {} \;
+find "$SITE_ROOT" -type f -exec chmod 644 {} \;
+
+# Create htpasswd file
+mkdir -p /etc/nginx/htpasswd
+# Use openssl to generate password hash (compatible with crypt() used by nginx basic auth)
+# We use -crypt for compatibility, or we can use python/perl if openssl version doesn't support -crypt directly in a way nginx likes, 
+# but openssl passwd is usually fine. Nginx supports crypt(), md5, sha1.
+# Let's use openssl passwd -5 (SHA-256) if available, or just default.
+# Checking if openssl passwd works.
+PASS_HASH=$(openssl passwd -5 "$SECURE_PASS" 2>/dev/null || openssl passwd -1 "$SECURE_PASS")
+echo "$SECURE_USER:$PASS_HASH" > "/etc/nginx/htpasswd/${DOMAIN}_${SECURE_DIR_NAME}"
+
 
 # Informações finais
 echo -e "\nInstalação concluída! Detalhes do site:"
@@ -180,7 +215,12 @@ echo "Usuário WordPress: $WP_ADMIN_USER"
 echo "Senha WordPress: $WP_ADMIN_PASS"
 echo "Email Administrador: $ADMIN_EMAIL"
 echo "Versão do PHP: $PHP_VERSION"
-echo "Pool de admin configurado com limites maiores para wp-admin" 
+echo "Pool de admin configurado com limites maiores para wp-admin"
+echo ""
+echo "=== FERRAMENTAS ADMINISTRATIVAS ==="
+echo "URL Adminer/Opcache: $FULL_URL/$SECURE_DIR_NAME/"
+echo "Usuário: $SECURE_USER"
+echo "Senha: $SECURE_PASS" 
 # Final information
 mkdir -p ~/.iw ; >> ~/.iw/wp.txt 
 {
@@ -200,5 +240,10 @@ mkdir -p ~/.iw ; >> ~/.iw/wp.txt
   echo "WordPress Admin Password: $WP_ADMIN_PASS"
   echo "Admin Email: $ADMIN_EMAIL"
   echo "PHP Version: $PHP_VERSION"
+  echo ""
+  echo "=== SECURE TOOLS ==="
+  echo "Tools URL: $FULL_URL/$SECURE_DIR_NAME/"
+  echo "User: $SECURE_USER"
+  echo "Password: $SECURE_PASS"
   echo -e "\nYou can now access your WordPress admin at: $FULL_URL/wp-admin/"
 } | tee ~/.iw/wp.txt 

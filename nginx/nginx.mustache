@@ -320,6 +320,20 @@ server {
     }
 
     # ============================================================================
+    # SEÇÃO 6.5: SECURE TOOLS DIRECTORY
+    # ============================================================================
+
+    location ^~ /{{SECURE_DIR}}/ {
+        auth_basic "Restricted Area";
+        auth_basic_user_file /etc/nginx/htpasswd/{{DOMAIN}}_{{SECURE_DIR}};
+
+        location ~ \.php$ {
+            include snippets/fastcgi-php.conf;
+            fastcgi_pass php{{PHP_VERSION_NO_DOT}}_admin;
+        }
+    }
+
+    # ============================================================================
     # SEÇÃO 7: GENERAL PHP HANDLER & FALLBACK
     # ============================================================================
 
