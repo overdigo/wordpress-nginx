@@ -1,6 +1,6 @@
 server {
-    listen 80 default_server reuseport;
-    listen [::]:80 default_server reuseport;
+    listen 80 default_server reuseport backlog=4096;
+    listen [::]:80 default_server reuseport backlog=4096;
     server_name _;
     if ($request !~* ^(GET|POST|HEAD)) {
         return 444;
@@ -13,8 +13,8 @@ server {
     return 444;
 }
 server {
-    listen 443 ssl default_server reuseport;
-    listen [::]:443 ssl default_server reuseport;
+    listen 443 ssl default_server reuseport backlog=4096;
+    listen [::]:443 ssl default_server reuseport backlog=4096;
     server_name _;
     ssl_certificate /etc/nginx/ssl/selfsigned.crt;
     ssl_certificate_key /etc/nginx/ssl/selfsigned.key;
