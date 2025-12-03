@@ -16,8 +16,8 @@ server {
     listen 443 ssl default_server reuseport;
     listen[::]: 443 ssl default_server reuseport;
     server_name _;
-    ssl_certificate / etc / nginx / ssl / cert.pem;
-    ssl_certificate_key / etc / nginx / ssl / key.pem;
+    ssl_certificate /etc/nginx/ssl/cert.pem;
+    ssl_certificate_key /etc/nginx/ssl/key.pem;
     ssl_stapling off;
     ssl_stapling_verify off;
     if ($request!~* ^ (GET | POST | HEAD)) {
