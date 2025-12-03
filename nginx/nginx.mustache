@@ -6,12 +6,12 @@ upstream php{{PHP_VERSION_NO_DOT}}_get {
 }
 
 upstream php{{PHP_VERSION_NO_DOT}}_other {
-    server unix:/var/run/php{{PHP_VERSION}}-fpm-visitor-other.sock;
+    server unix:/run/php/php{{PHP_VERSION}}-fpm-visitor-other.sock;
     keepalive 2;
 }
 
 upstream php{{PHP_VERSION_NO_DOT}}_admin {
-    server unix:/var/run/php{{PHP_VERSION}}-fpm-admin.sock;
+    server unix:/run/php/php{{PHP_VERSION}}-fpm-admin.sock;
     keepalive 1;
 }
 
