@@ -22,9 +22,33 @@ render_template() {
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Coleta informações do usuário
+# Carrega variáveis de ambiente globais se existirem
+if [ -f /etc/profile.d/wordpress-nginx-env.sh ]; then
+    source /etc/profile.d/wordpress-nginx-env.sh
+fi
+
 read -p "Digite a URL completa do site (ex: http://192-168-0-117.sslip.io ou https://exemplo.com): " FULL_URL
 read -p "Digite seu email: " ADMIN_EMAIL
-read -p "Digite a versão do PHP a ser instalada (ex: 8.4): " PHP_VERSION
+
+# Define versão do PHP com valor padrão
+DEFAULT_PHP_MSG=""
+if [ -n "$DEFAULT_PHP_VERSION" ]; then
+    DEFAULT_PHP_MSG=" (padrão: $DEFAULT_PHP_VERSION)"
+fi
+
+read -p "Digite a versão do PHP a ser instalada (ex: 8.4)${DEFAULT_PHP_MSG}: " PHP_VERSION_INPUT
+
+if [ -z "$PHP_VERSION_INPUT" ] && [ -n "$DEFAULT_PHP_VERSION" ]; then
+    PHP_VERSION="$DEFAULT_PHP_VERSION"
+    echo "Usando versão padrão do PHP: $PHP_VERSION"
+else
+    PHP_VERSION="$PHP_VERSION_INPUT"
+fi
+
+if [ -z "$PHP_VERSION" ]; then
+    echo "Erro: Versão do PHP é obrigatória."
+    exit 1
+fi
 read -p "Digite a senha do MySQL root: " MYSQL_ROOT_PASS
 
 # Extrai o domínio da URL

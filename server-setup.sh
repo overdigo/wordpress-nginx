@@ -18,6 +18,10 @@ command_exists() {
 read -p "PHP version to install (e.g., 8.1): " PHP_VERSION
 PHP_VERSION_NO_DOT=${PHP_VERSION//./}
 
+# Save PHP version to global environment
+echo "export DEFAULT_PHP_VERSION=$PHP_VERSION" > /etc/profile.d/wordpress-nginx-env.sh
+chmod +x /etc/profile.d/wordpress-nginx-env.sh
+
 # Generate a random MySQL root password
 MYSQL_ROOT_PASSWORD=$(openssl rand -base64 12)
 
@@ -89,12 +93,11 @@ fi
 mkdir -p /etc/nginx/sites-enabled/
 mkdir -p /etc/nginx/sites-available/
 mkdir -p /etc/nginx/snippets/
-wget -q -O /tmp/nginx.conf https://raw.githubusercontent.com/overdigo/wordpress-nginx/master/nginx/nginx.conf
-wget -q -O /tmp/fastcgi.conf https://raw.githubusercontent.com/overdigo/wordpress-nginx/master/nginx/fastcgi.conf
-wget -q -O /tmp/fastcgi-php.conf https://raw.githubusercontent.com/overdigo/wordpress-nginx/blob/master/nginx/snippets/fastcgi-php.conf
-mv -f /tmp/nginx.conf /etc/nginx/nginx.conf
-mv -f /tmp/fastcgi.conf /etc/nginx/fastcgi.conf
-mv -f /tmp/fastcgi-php.conf /etc/nginx/snippets/fastcgi-php.conf
+cp "$SCRIPT_DIR/nginx/nginx.conf" /etc/nginx/nginx.conf
+cp "$SCRIPT_DIR/nginx/default" /etc/nginx/sites-available/default
+ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
+cp "$SCRIPT_DIR/nginx/fastcgi.conf" /etc/nginx/fastcgi.conf
+cp "$SCRIPT_DIR/nginx/snippets/fastcgi-php.conf" /etc/nginx/snippets/fastcgi-php.conf
 
 # Install PHP if not already installed
 if ! command_exists php; then
