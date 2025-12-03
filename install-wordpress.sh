@@ -109,10 +109,6 @@ wp core download --locale=pt_BR --allow-root
 wp config create --dbname=$DB_NAME --dbuser=$DB_USER --dbpass=$DB_PASS --allow-root
 wp core install --url="$FULL_URL" --title="$DOMAIN" --admin_user="$WP_ADMIN_USER" --admin_password="$WP_ADMIN_PASS" --admin_email="$ADMIN_EMAIL" --allow-root
 
-# Set permalink structure to /%postname%/
-wp rewrite structure '/%postname%/' --allow-root
-wp rewrite flush --hard --allow-root
-
 # Insert configurations above the specified comment in wp-config.php
 sed -i "/\/\* That's all, stop editing! Happy publishing. \*\//i \
 define('WP_MEMORY_LIMIT', '256M');\
@@ -132,6 +128,10 @@ wp plugin deactivate hello --allow-root
 wp plugin delete hello --allow-root
 wp plugin install nginx-helper --activate --allow-root
 wp plugin update --all --allow-root
+
+# Set permalink structure to /%postname%/
+wp rewrite structure '/%postname%/' --allow-root
+wp rewrite flush --hard --allow-root
 
 # Set up a cron job to run WordPress cron tasks every 5 minutes
 (crontab -l -u www-data 2>/dev/null; echo "*/5 * * * * /usr/local/bin/wp cron event run --due-now --path=$SITE_ROOT --allow-root") | crontab -u www-data -
