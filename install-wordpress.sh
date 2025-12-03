@@ -22,9 +22,33 @@ render_template() {
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Coleta informações do usuário
+# Carrega variáveis de ambiente globais se existirem
+if [ -f /etc/profile.d/wordpress-nginx-env.sh ]; then
+    source /etc/profile.d/wordpress-nginx-env.sh
+fi
+
 read -p "Digite a URL completa do site (ex: http://192-168-0-117.sslip.io ou https://exemplo.com): " FULL_URL
 read -p "Digite seu email: " ADMIN_EMAIL
-read -p "Digite a versão do PHP a ser instalada (ex: 8.4): " PHP_VERSION
+
+# Define versão do PHP com valor padrão
+DEFAULT_PHP_MSG=""
+if [ -n "$DEFAULT_PHP_VERSION" ]; then
+    DEFAULT_PHP_MSG=" (padrão: $DEFAULT_PHP_VERSION)"
+fi
+
+read -p "Digite a versão do PHP a ser instalada (ex: 8.4)${DEFAULT_PHP_MSG}: " PHP_VERSION_INPUT
+
+if [ -z "$PHP_VERSION_INPUT" ] && [ -n "$DEFAULT_PHP_VERSION" ]; then
+    PHP_VERSION="$DEFAULT_PHP_VERSION"
+    echo "Usando versão padrão do PHP: $PHP_VERSION"
+else
+    PHP_VERSION="$PHP_VERSION_INPUT"
+fi
+
+if [ -z "$PHP_VERSION" ]; then
+    echo "Erro: Versão do PHP é obrigatória."
+    exit 1
+fi
 read -p "Digite a senha do MySQL root: " MYSQL_ROOT_PASS
 
 # Extrai o domínio da URL
@@ -85,10 +109,6 @@ wp core download --locale=pt_BR --allow-root
 wp config create --dbname=$DB_NAME --dbuser=$DB_USER --dbpass=$DB_PASS --allow-root
 wp core install --url="$FULL_URL" --title="$DOMAIN" --admin_user="$WP_ADMIN_USER" --admin_password="$WP_ADMIN_PASS" --admin_email="$ADMIN_EMAIL" --allow-root
 
-# Set permalink structure to /%postname%/
-wp rewrite structure '/%postname%/' --allow-root
-wp rewrite flush --hard --allow-root
-
 # Insert configurations above the specified comment in wp-config.php
 sed -i "/\/\* That's all, stop editing! Happy publishing. \*\//i \
 define('WP_MEMORY_LIMIT', '256M');\
@@ -109,24 +129,26 @@ wp plugin delete hello --allow-root
 wp plugin install nginx-helper --activate --allow-root
 wp plugin update --all --allow-root
 
+# Set permalink structure to /%postname%/
+wp rewrite structure '/%postname%/' --allow-root
+wp rewrite flush --hard --allow-root
+
 # Set up a cron job to run WordPress cron tasks every 5 minutes
 (crontab -l -u www-data 2>/dev/null; echo "*/5 * * * * /usr/local/bin/wp cron event run --due-now --path=$SITE_ROOT --allow-root") | crontab -u www-data -
 
-# Configuração para SSL ou não-SSL usando templates
-if [ "$USE_SSL" = true ]; then
-    # Cria certificado SSL autoassinado
-    mkdir -p /etc/nginx/ssl
+# Configuração do Nginx (Sempre usa SSL com o novo template)
+# Cria certificado SSL autoassinado se não existir
+mkdir -p /etc/nginx/ssl
+if [ ! -f "/etc/nginx/ssl/$DOMAIN.crt" ]; then
+    echo "Gerando certificado SSL autoassinado para $DOMAIN..."
     openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
       -keyout /etc/nginx/ssl/$DOMAIN.key \
       -out /etc/nginx/ssl/$DOMAIN.crt \
       -subj "/CN=$DOMAIN"
-      
-    # Renderiza o template com SSL
-    render_template "$SCRIPT_DIR/nginx-ssl.mustache" "/etc/nginx/sites-available/$DOMAIN"
-else
-    # Renderiza o template sem SSL
-    render_template "$SCRIPT_DIR/nginx-nonssl.mustache" "/etc/nginx/sites-available/$DOMAIN"
 fi
+      
+# Renderiza o template (sempre usa nginx.mustache)
+render_template "$SCRIPT_DIR/nginx/nginx.mustache" "/etc/nginx/sites-available/$DOMAIN"
 
 # Aplica configuração
 ln -sf /etc/nginx/sites-available/$DOMAIN /etc/nginx/sites-enabled/
@@ -160,7 +182,7 @@ echo "Email Administrador: $ADMIN_EMAIL"
 echo "Versão do PHP: $PHP_VERSION"
 echo "Pool de admin configurado com limites maiores para wp-admin" 
 # Final information
->> ~/.iw/wp.txt 
+mkdir -p ~/.iw ; >> ~/.iw/wp.txt 
 {
   echo -e "\nInstallation completed! Site details:"
   echo "Domain: $DOMAIN"

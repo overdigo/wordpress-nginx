@@ -1,0 +1,32 @@
+server {
+    listen 80 default_server reuseport backlog=4096;
+    listen [::]:80 default_server reuseport backlog=4096;
+    server_name _;
+    if ($request !~* ^(GET|POST|HEAD)) {
+        return 444;
+    }
+    location = /favicon.ico {
+        log_not_found off;
+        access_log off;
+        return 204;
+    }
+    return 444;
+}
+server {
+    listen 443 ssl default_server reuseport backlog=4096;
+    listen [::]:443 ssl default_server reuseport backlog=4096;
+    server_name _;
+    ssl_certificate /etc/nginx/ssl/selfsigned.crt;
+    ssl_certificate_key /etc/nginx/ssl/selfsigned.key;
+    ssl_stapling off;
+    ssl_stapling_verify off;
+    if ($request !~* ^(GET|POST|HEAD)) {
+        return 444;
+    }
+    location = /favicon.ico {
+        log_not_found off;
+        access_log off;
+        return 204;
+    }
+    return 444;
+}
