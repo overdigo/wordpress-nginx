@@ -93,20 +93,11 @@ fi
 mkdir -p /etc/nginx/sites-enabled/
 mkdir -p /etc/nginx/sites-available/
 mkdir -p /etc/nginx/snippets/
-<<<<<<< HEAD
-wget -q -O /tmp/nginx.conf https://raw.githubusercontent.com/overdigo/wordpress-nginx/master/nginx/nginx.conf
-wget -q -O /tmp/fastcgi.conf https://raw.githubusercontent.com/overdigo/wordpress-nginx/master/nginx/fastcgi.conf
-wget -q -O /tmp/fastcgi-php.conf https://raw.githubusercontent.com/overdigo/wordpress-nginx/blob/master/nginx/snippets/fastcgi-php.conf
-mv /tmp/nginx.conf /etc/nginx/nginx.conf | yes
-mv /tmp/fastcgi.conf /etc/nginx/fastcgi.conf | yes
-mv /tmp/fastcgi-php.conf /etc/nginx/snippets/fastcgi-php.conf | yes
-=======
 cp "$SCRIPT_DIR/nginx/nginx.conf" /etc/nginx/nginx.conf
 cp "$SCRIPT_DIR/nginx/default" /etc/nginx/sites-available/default
 ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
 cp "$SCRIPT_DIR/nginx/fastcgi.conf" /etc/nginx/fastcgi.conf
 cp "$SCRIPT_DIR/nginx/snippets/fastcgi-php.conf" /etc/nginx/snippets/fastcgi-php.conf
->>>>>>> 2.0
 
 # Install PHP if not already installed
 if ! command_exists php; then
