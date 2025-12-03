@@ -93,6 +93,10 @@ fi
 mkdir -p /etc/nginx/sites-enabled/
 mkdir -p /etc/nginx/sites-available/
 mkdir -p /etc/nginx/snippets/
+mkdir -p /etc/nginx/ssl
+openssl ecparam -name prime256v1 -out ecparam.pem
+openssl req -x509 -nodes -days 365 -newkey ec:ecparam.pem -keyout /etc/nginx/ssl/selfsigned.key -out /etc/nginx/ssl/selfsigned.crt
+rm ecparam.pem
 cp "$SCRIPT_DIR/nginx/nginx.conf" /etc/nginx/nginx.conf
 cp "$SCRIPT_DIR/nginx/default" /etc/nginx/sites-available/default
 ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
