@@ -1,5 +1,15 @@
 #!/bin/bash
 
+# =================================================================
+# CORES E FORMATAÇÃO
+# =================================================================
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+BOLD='\033[1m'
+
 # Função para substituir variáveis em templates
 render_template() {
     local template="$1"
@@ -22,69 +32,215 @@ render_template() {
 # Diretório do script atual
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Coleta informações do usuário
 # Carrega variáveis de ambiente globais se existirem
 if [ -f /etc/profile.d/wordpress-nginx-env.sh ]; then
     source /etc/profile.d/wordpress-nginx-env.sh
 fi
 
-read -p "Digite a URL completa do site (ex: http://192-168-0-117.sslip.io ou https://exemplo.com): " FULL_URL
-read -p "Digite seu email: " ADMIN_EMAIL
+# =================================================================
+# FUNÇÕES DE COLETA DE CONFIGURAÇÃO COM CONFIRMAÇÃO
+# =================================================================
 
-# Define versão do PHP com valor padrão
-DEFAULT_PHP_MSG=""
-if [ -n "$DEFAULT_PHP_VERSION" ]; then
-    DEFAULT_PHP_MSG=" (padrão: $DEFAULT_PHP_VERSION)"
-fi
+# Função para coletar URL do site
+select_site_url() {
+  echo -e "\n${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  echo -e "${BOLD}🌐 URL do Site${NC}"
+  echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  read -p "Digite a URL completa (ex: https://exemplo.com): " FULL_URL
+  
+  # Extrai o domínio da URL
+  DOMAIN=$(echo "$FULL_URL" | sed -e 's|^[^/]*//||' -e 's|/.*$||')
+  
+  # Normaliza a URL para sempre usar HTTPS
+  if [[ "$FULL_URL" != https://* ]] && [[ "$FULL_URL" != http://* ]]; then
+      # Se não especificou protocolo, adiciona https://
+      DOMAIN="$FULL_URL"
+      FULL_URL="https://$DOMAIN"
+  fi
+  
+  SITE_ROOT="/var/www/$DOMAIN"
+}
 
-read -p "Digite a versão do PHP a ser instalada (ex: 8.4)${DEFAULT_PHP_MSG}: " PHP_VERSION_INPUT
+# Função para coletar email
+select_admin_email() {
+  echo -e "\n${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  echo -e "${BOLD}📧 Email do Administrador${NC}"
+  echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  read -p "Digite seu email: " ADMIN_EMAIL
+}
 
-if [ -z "$PHP_VERSION_INPUT" ] && [ -n "$DEFAULT_PHP_VERSION" ]; then
-    PHP_VERSION="$DEFAULT_PHP_VERSION"
-    echo "Usando versão padrão do PHP: $PHP_VERSION"
-else
-    PHP_VERSION="$PHP_VERSION_INPUT"
-fi
+# Função para coletar versão do PHP
+select_php_version() {
+  echo -e "\n${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  echo -e "${BOLD}📦 Versão do PHP${NC}"
+  echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  
+  local DEFAULT_PHP_MSG=""
+  if [ -n "$DEFAULT_PHP_VERSION" ]; then
+      DEFAULT_PHP_MSG=" [padrão: $DEFAULT_PHP_VERSION]"
+  fi
+  
+  read -p "Digite a versão do PHP (ex: 8.1, 8.2, 8.3)${DEFAULT_PHP_MSG}: " PHP_VERSION_INPUT
+  
+  if [ -z "$PHP_VERSION_INPUT" ] && [ -n "$DEFAULT_PHP_VERSION" ]; then
+      PHP_VERSION="$DEFAULT_PHP_VERSION"
+  else
+      PHP_VERSION="$PHP_VERSION_INPUT"
+  fi
+}
 
-if [ -z "$PHP_VERSION" ]; then
-    echo "Erro: Versão do PHP é obrigatória."
-    exit 1
-fi
-read -p "Digite a senha do MySQL root: " MYSQL_ROOT_PASS
+# Função para coletar senha do MySQL
+select_mysql_password() {
+  echo -e "\n${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  echo -e "${BOLD}🔐 Senha do MySQL Root${NC}"
+  echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  read -s -p "Digite a senha do MySQL root: " MYSQL_ROOT_PASS
+  echo ""
+  MYSQL_PASS_DISPLAY="••••••••"
+}
 
-# Extrai o domínio da URL
-DOMAIN=$(echo "$FULL_URL" | sed -e 's|^[^/]*//||' -e 's|/.*$||')
+# Função para exibir resumo das configurações
+show_summary() {
+  echo -e "\n${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  echo -e "${BOLD}📋 RESUMO DAS CONFIGURAÇÕES${NC}"
+  echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  echo -e "  ${BOLD}1)${NC} URL:        ${CYAN}$FULL_URL${NC}"
+  echo -e "  ${BOLD}  ${NC} Domínio:    ${CYAN}$DOMAIN${NC}"
+  echo -e "  ${BOLD}  ${NC} Caminho:    ${CYAN}$SITE_ROOT${NC}"
+  echo -e "  ${BOLD}2)${NC} Email:      ${CYAN}$ADMIN_EMAIL${NC}"
+  echo -e "  ${BOLD}3)${NC} PHP:        ${CYAN}$PHP_VERSION${NC}"
+  echo -e "  ${BOLD}4)${NC} MySQL Pass: ${CYAN}$MYSQL_PASS_DISPLAY${NC}"
+  echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  
+  # Aviso se o diretório já existe
+  if [ -d "$SITE_ROOT" ]; then
+    echo -e "  ${YELLOW}⚠️  ATENÇÃO: O diretório $SITE_ROOT já existe!${NC}"
+    echo -e "  ${YELLOW}   Continuar pode sobrescrever dados existentes.${NC}"
+  fi
+}
 
-# Define caminho do site baseado no domínio
-SITE_ROOT="/var/www/$DOMAIN"
+# Função para validar inputs
+validate_inputs() {
+  local valid=true
+  
+  if [ -z "$FULL_URL" ] || [ -z "$DOMAIN" ]; then
+    echo -e "${RED}Erro: URL do site não definida${NC}"
+    valid=false
+  fi
+  
+  if [ -z "$ADMIN_EMAIL" ]; then
+    echo -e "${RED}Erro: Email do administrador não definido${NC}"
+    valid=false
+  fi
+  
+  if [ -z "$PHP_VERSION" ]; then
+    echo -e "${RED}Erro: Versão do PHP não definida${NC}"
+    valid=false
+  fi
+  
+  if [ -z "$MYSQL_ROOT_PASS" ]; then
+    echo -e "${RED}Erro: Senha do MySQL não definida${NC}"
+    valid=false
+  fi
+  
+  if [ "$valid" = false ]; then
+    return 1
+  fi
+  return 0
+}
 
-# Verifica se é SSL ou não
-if [[ "$FULL_URL" == https://* ]]; then
-    USE_SSL=true
-    echo "Configurando com SSL..."
-elif [[ "$FULL_URL" == http://* ]]; then
-    USE_SSL=false
-    echo "Configurando sem SSL..."
-else
-    # Se o usuário não especificar protocolo, assume HTTPS
-    USE_SSL=true
-    DOMAIN="$FULL_URL"
-    FULL_URL="https://$DOMAIN"
-    SITE_ROOT="/var/www/$DOMAIN"
-    echo "Protocolo não especificado, usando HTTPS por padrão..."
+# Função principal de coleta de configuração
+collect_configuration() {
+  while true; do
+    # Coleta inicial
+    if [ -z "$FULL_URL" ]; then
+      select_site_url
+    fi
+    
+    if [ -z "$ADMIN_EMAIL" ]; then
+      select_admin_email
+    fi
+    
+    if [ -z "$PHP_VERSION" ]; then
+      select_php_version
+    fi
+    
+    if [ -z "$MYSQL_ROOT_PASS" ]; then
+      select_mysql_password
+    fi
+    
+    # Exibe resumo
+    show_summary
+    
+    # Pergunta confirmação
+    echo -e "\n${YELLOW}O que você deseja fazer?${NC}"
+    echo "  c) Confirmar e iniciar instalação"
+    echo "  1) Editar URL do site"
+    echo "  2) Editar email do administrador"
+    echo "  3) Editar versão do PHP"
+    echo "  4) Editar senha do MySQL"
+    echo "  q) Cancelar e sair"
+    read -p "Escolha: " CONFIRM_CHOICE
+    
+    case $CONFIRM_CHOICE in
+      c|C)
+        if validate_inputs; then
+          echo -e "\n${GREEN}✓ Configurações confirmadas! Iniciando instalação...${NC}\n"
+          break
+        fi
+        ;;
+      1)
+        FULL_URL=""
+        DOMAIN=""
+        select_site_url
+        ;;
+      2)
+        ADMIN_EMAIL=""
+        select_admin_email
+        ;;
+      3)
+        PHP_VERSION=""
+        select_php_version
+        ;;
+      4)
+        MYSQL_ROOT_PASS=""
+        select_mysql_password
+        ;;
+      q|Q)
+        echo -e "${RED}Instalação cancelada pelo usuário.${NC}"
+        exit 0
+        ;;
+      *)
+        echo -e "${RED}Opção inválida. Tente novamente.${NC}"
+        ;;
+    esac
+  done
+}
+
+# =================================================================
+# INÍCIO DO SCRIPT
+# =================================================================
+
+echo -e "${BOLD}"
+echo "╔═══════════════════════════════════════════════════════════╗"
+echo "║         WordPress Installation Script                     ║"
+echo "║         Configuração interativa com confirmação           ║"
+echo "╚═══════════════════════════════════════════════════════════╝"
+echo -e "${NC}"
+
+# Coleta todas as configurações com confirmação
+collect_configuration
+
+# Verifica se o diretório já existe (após confirmação)
+if [ -d "$SITE_ROOT" ]; then
+    echo -e "${YELLOW}Diretório do site já existe: $SITE_ROOT${NC}"
+    echo -e "${YELLOW}Continuando com a instalação...${NC}"
 fi
 
 # Cria diretório para o site se não existir
 if [ ! -d "$SITE_ROOT" ]; then
     echo "Criando diretório para o site: $SITE_ROOT"
     mkdir -p "$SITE_ROOT"
-else
-    echo "Diretório do site já existe: $SITE_ROOT"
-    read -p "Continuar mesmo assim? Isso pode sobrescrever dados existentes. (s/n): " CONTINUE
-    if [[ "$CONTINUE" != "s" && "$CONTINUE" != "S" ]]; then
-        echo "Instalação cancelada."
-        exit 1
-    fi
 fi
 
 # Gera credenciais aleatórias
@@ -141,10 +297,9 @@ wp rewrite flush --hard --allow-root
 mkdir -p /etc/nginx/ssl
 if [ ! -f "/etc/nginx/ssl/$DOMAIN.crt" ]; then
     echo "Gerando certificado SSL autoassinado para $DOMAIN..."
-    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-      -keyout /etc/nginx/ssl/$DOMAIN.key \
-      -out /etc/nginx/ssl/$DOMAIN.crt \
-      -subj "/CN=$DOMAIN"
+    openssl ecparam -name prime256v1 -out ecparam.pem
+    openssl req -x509 -nodes -days 365 -newkey ec:ecparam.pem -keyout /etc/nginx/ssl/$DOMAIN.key -out /etc/nginx/ssl/$DOMAIN.crt
+    rm ecparam.pem
 fi
       
 # Renderiza o template (sempre usa nginx.mustache)
@@ -201,12 +356,8 @@ echo "$SECURE_USER:$PASS_HASH" > "/etc/nginx/htpasswd/${DOMAIN}_${SECURE_DIR_NAM
 # Informações finais
 echo -e "\nInstalação concluída! Detalhes do site:"
 echo "Domínio: $DOMAIN"
-if [ "$USE_SSL" = true ]; then
-    echo "URL do site: $FULL_URL (SSL ativado)"
-    echo "Certificado SSL auto-assinado configurado (aceite o aviso do navegador)"
-else
-    echo "URL do site: $FULL_URL (sem SSL)"
-fi
+echo "URL do site: $FULL_URL (SSL ativado)"
+echo "Certificado SSL auto-assinado configurado (aceite o aviso do navegador)"
 echo "Caminho do site: $SITE_ROOT"
 echo "Banco de Dados: $DB_NAME"
 echo "Usuário BD: $DB_USER"
@@ -226,12 +377,8 @@ mkdir -p ~/.iw ; >> ~/.iw/wp.txt
 {
   echo -e "\nInstallation completed! Site details:"
   echo "Domain: $DOMAIN"
-  if [ "$USE_SSL" = true ]; then
-      echo "Site URL: $FULL_URL (SSL enabled)"
-      echo "Self-signed SSL certificate configured (accept browser warning)"
-  else
-      echo "Site URL: $FULL_URL (no SSL)"
-  fi
+  echo "Site URL: $FULL_URL (SSL enabled)"
+  echo "Self-signed SSL certificate configured (accept browser warning)"
   echo "Site path: $SITE_ROOT"
   echo "Database: $DB_NAME"
   echo "DB User: $DB_USER"

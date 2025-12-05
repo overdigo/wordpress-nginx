@@ -2,15 +2,16 @@
 pid = /run/php/php{{PHP_VERSION}}-fpm.pid
 error_log = /var/log/php{{PHP_VERSION}}-fpm.log
 log_level = error
+log_limit = 1024
 
 daemonize = yes
 events.mechanism = epoll
 emergency_restart_threshold = 10
 emergency_restart_interval = 1m
 process_control_timeout = 10s
-systemd_interval = 10
-process.max = 512
-;process.priority = -5
+systemd_interval = 10s
+process.max = 128
+process.priority = -19
 rlimit_files = 65535
 rlimit_core = 0
 

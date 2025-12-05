@@ -24,6 +24,17 @@ map $request_method $request_method_lower {
     default other;    # POST e HEAD (escrita/modificação)
 }
 
+# Define map variables for WebP and AVIF support
+map $http_accept $webp_suffix {
+    default "";
+    "~*webp" ".webp";
+}
+
+map $http_accept $avif_suffix {
+    default "";
+    "~*avif" ".avif";
+}
+
 # ============================================================================
 # SERVER BLOCK - Seu virtual host
 # ============================================================================
@@ -280,6 +291,7 @@ server {
         
         include snippets/fastcgi-php.conf;
         fastcgi_pass php{{PHP_VERSION_NO_DOT}}_other;  # POST sempre
+        fastcgi_keep_conn on;
     }
 
     # wp-login.php (rate limited) - GET (form) e POST (auth)
@@ -290,6 +302,7 @@ server {
         # GET -> exibir formulário (leitura)
         # POST -> autenticação (escrita)
         fastcgi_pass php{{PHP_VERSION_NO_DOT}}_$request_method_lower;
+        fastcgi_keep_conn on;
     }
 
     # wp-cron.php (rate limited) - sempre GET
@@ -297,12 +310,14 @@ server {
         limit_req zone=two burst=1 nodelay;
         include snippets/fastcgi-php.conf;
         fastcgi_pass php{{PHP_VERSION_NO_DOT}}_get;  # GET sempre
+        fastcgi_keep_conn on;
     }
 
     # TinyMCE - sempre GET
     location = /wp-includes/js/tinymce/wp-tinymce.php {
         include snippets/fastcgi-php.conf;
         fastcgi_pass php{{PHP_VERSION_NO_DOT}}_get;  # GET sempre
+        fastcgi_keep_conn on;
     }
 
     # ============================================================================
@@ -316,6 +331,7 @@ server {
             fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
             include fastcgi_params;
             fastcgi_pass php{{PHP_VERSION_NO_DOT}}_admin;  # Pool dedicado admin
+            fastcgi_keep_conn on;
         }
     }
 
@@ -330,6 +346,7 @@ server {
         location ~ \.php$ {
             include snippets/fastcgi-php.conf;
             fastcgi_pass php{{PHP_VERSION_NO_DOT}}_admin;
+            fastcgi_keep_conn on;
         }
     }
 
@@ -346,6 +363,7 @@ server {
         # GET -> pool com 2 workers + least_conn (leitura rápida)
         # POST/HEAD -> pool separado (escrita/modificação)
         fastcgi_pass php{{PHP_VERSION_NO_DOT}}_$request_method_lower;
+        fastcgi_keep_conn on;
     }
 
     # Index.php fallback (must be last)
@@ -364,7 +382,7 @@ server {
         # SSL
         ssl_certificate /etc/nginx/ssl/{{DOMAIN}}.crt;
         ssl_certificate_key /etc/nginx/ssl/{{DOMAIN}}.key;
-        return 301 https://{{DOMAIN}};$request_uri;
+        return 301 https://{{DOMAIN}}$request_uri;
     }
 
     # HTTP redirect
@@ -379,6 +397,6 @@ server {
         }
 
         location / {
-            return 301 https://{{DOMAIN}};$request_uri;
+            return 301 https://{{DOMAIN}}$request_uri;
         }
     }

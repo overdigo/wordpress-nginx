@@ -6,15 +6,13 @@ listen.owner = www-data
 listen.group = www-data
 listen.mode = 0660
 process.dumpable = no
-;pm = dynamic
-;pm.max_children = 200
-;pm.start_servers = 2
-;pm.min_spare_servers = 5
-;pm.max_spare_servers = 100
-;pm.process_idle_timeout = 30s
-pm = static
-pm.max_children = 5
-pm.max_requests = 100
+pm = dynamic
+pm.max_children = 15
+pm.start_servers = 3
+pm.min_spare_servers = 2
+pm.max_spare_servers = 6
+pm.max_spawn_rate = 5
+pm.max_requests = 500
 request_terminate_timeout = 120
 rlimit_files = 65535
 rlimit_core = 0
@@ -26,3 +24,26 @@ ping.path = /ping
 pm.status_path = /status
 
 php_admin_value[open_basedir] = "/var/www/:/usr/share/php/:/tmp/:/var/run/nginx-cache/:/dev/urandom:/dev/shm:/var/lib/php/sessions/"
+
+;; dynamic config
+;pm = dynamic
+;pm.max_children = 45
+;pm.start_servers = 6
+;pm.min_spare_servers = 4
+;pm.max_spare_servers = 12
+;pm.max_spawn_rate = 32
+;pm.max_requests = 500
+
+;; ondemand config
+;pm = ondemand
+;pm.max_children = 45
+;pm.process_idle_timeout = 10s
+;pm.max_requests = 500
+
+;; tcp listen config
+;listen = 127.0.0.1:9000
+;listen.backlog = 4096
+;listen.owner = www-data
+;listen.group = www-data
+;listen.mode = 0660
+;listen.allowed_clients = 127.0.0.1
