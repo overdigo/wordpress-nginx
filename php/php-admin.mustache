@@ -6,6 +6,7 @@ listen.owner = www-data
 listen.group = www-data
 listen.mode = 0660
 process.dumpable = no
+pm = dynamic
 pm.max_children = 10
 pm.start_servers = 1
 pm.min_spare_servers = 1
@@ -23,7 +24,6 @@ ping.path = /ping
 pm.status_path = /status
 
 ; Custom values for wp-admin
-process.priority = -20
 php_admin_value[upload_max_filesize] = 100M
 php_admin_value[post_max_size] = 100M
 php_admin_value[max_execution_time] = 600
