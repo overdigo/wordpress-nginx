@@ -84,6 +84,34 @@ server {
     # SEÇÃO 2: SECURITY BLOCKS - BLOQUEIOS DE SEGURANÇA (EXECUTAM PRIMEIRO)
     # ============================================================================
     
+    # Block malicious cookies (XSS patterns - normal and URL-encoded)
+    # %3C = <, %3E = >, %27 = ', %22 = "
+    if ($http_cookie ~* "(<|%3C).*script.*(>|%3E)") {
+        return 403;
+    }
+    if ($http_cookie ~* "(javascript|vbscript|expression|onload|onerror|onclick|onmouseover)(\s*:|%3A)") {
+        return 403;
+    }
+    if ($http_cookie ~* "(document\.(cookie|write|location)|window\.(location|open))") {
+        return 403;
+    }
+    if ($http_cookie ~* "(eval|alert|confirm|prompt)\s*\(") {
+        return 403;
+    }
+
+    # Block malicious query strings (XSS patterns)
+    if ($query_string ~* "(<|%3C).*script.*(>|%3E)") {
+        return 403;
+    }
+    if ($query_string ~* "(javascript|vbscript|expression)(\s*:|%3A)") {
+        return 403;
+    }
+
+    # Block malicious request body patterns in args
+    if ($args ~* "(eval|base64_encode|base64_decode)\s*\(") {
+        return 403;
+    }
+
     # Block suspicious patterns in URL
     location ~* "(base64_encode)(.*)(\()" { deny all; }
     location ~* "(eval\()" { deny all; }
@@ -119,6 +147,11 @@ server {
 
     # WordPress: deny sensitive files
     location ~* ^/(?:wp-links-opml\.php|wp-config\.php|wp-config-sample\.php)$ {
+        deny all;
+    }
+
+    # Block WordPress installation script (prevent reinstall attacks)
+    location = /wp-admin/install.php {
         deny all;
     }
     
