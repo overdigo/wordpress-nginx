@@ -257,7 +257,7 @@ if [ "$NGINX_CHOICE" != "0" ] && ! command_exists nginx; then
       ;;
     3)
       echo "Installing Nginx from Ubuntu repository..."
-      apt install -y nginx
+      apt install -y nginx libnginx-mod-http-brotli-filter libnginx-mod-http-headers-more-filter
       WEB_SERVER_SERVICE_NAME="nginx"
       ;;
   esac
@@ -268,7 +268,10 @@ mkdir -p /etc/nginx/sites-available/
 mkdir -p /etc/nginx/snippets/
 mkdir -p /etc/nginx/ssl
 openssl ecparam -name prime256v1 -out ecparam.pem
-openssl req -x509 -nodes -days 365 -newkey ec:ecparam.pem -keyout /etc/nginx/ssl/selfsigned.key -out /etc/nginx/ssl/selfsigned.crt
+openssl req -x509 -nodes -days 365 -newkey ec:ecparam.pem \
+    -keyout /etc/nginx/ssl/selfsigned.key \
+    -out /etc/nginx/ssl/selfsigned.crt \
+    -subj "/C=BR/ST=State/L=City/O=Organization/CN=localhost"
 rm ecparam.pem
 cp "$SCRIPT_DIR/nginx/nginx.conf" /etc/nginx/nginx.conf
 cp "$SCRIPT_DIR/nginx/default" /etc/nginx/sites-available/default
@@ -556,7 +559,7 @@ if [ "$DB_CHOICE" != "0" ] && ! command_exists mysql; then
     DEBIAN_FRONTEND=noninteractive dpkg -i mysql-apt-config_0.8.34-1_all.deb
     apt-key adv --keyserver keyserver.ubuntu.com --recv-keys B7B3B788A8D3785C
     apt update
-    apt install -y mysql-server
+    apt install -y mysql-server libjemalloc2
     
     # Setup MySQL root password
     mysql --execute="ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '$MYSQL_ROOT_PASSWORD'; FLUSH PRIVILEGES;"
@@ -593,7 +596,7 @@ EOF
     esac
 
     echo "Installing MariaDB $MARIADB_VERSION..."
-    apt install -y apt-transport-https curl
+    apt install -y apt-transport-https curl libjemalloc2
     curl -o /etc/apt/trusted.gpg.d/mariadb_release_signing_key.asc 'https://mariadb.org/mariadb_release_signing_key.asc'
     sh -c "echo 'deb https://mirrors.xtom.de/mariadb/repo/$MARIADB_VERSION/ubuntu `lsb_release -cs` main' > /etc/apt/sources.list.d/mariadb.list"
     apt update
@@ -663,45 +666,49 @@ mkdir -p ~/.iw ; >> ~/.iw/server.txt
   # Security notice  
   echo -e "\nSecurity Notice:"
   echo "- MySQL is configured to only accept connections from localhost"
-  echo "- Remember to secure your server with a firewall (e.g., UFW)"
+  echo "- Firewall nftables configurado com rate limiting em SSH"
   echo "- Consider installing fail2ban for additional security"
 } | tee ~/.iw/server.txt
 
 # Security notice
 echo -e "\nSecurity Notice:"
 echo "- MySQL is configured to only accept connections from localhost"
-echo "- Remember to secure your server with a firewall (e.g., UFW)"
+echo "- Firewall nftables configurado com rate limiting em SSH"
 echo "- Consider installing fail2ban for additional security"
 
-# Apply sysctl settings for performance and security
-cat <<EOF >> /etc/sysctl.d/99-sysctl.conf
-# Increase the maximum number of open file descriptors
-fs.file-max = 2097152
+# Apply sysctl performance and security settings
+echo "Aplicando configurações sysctl..."
+cp "$SCRIPT_DIR/50-perf.conf" /etc/sysctl.d/50-perf.conf
+sudo sysctl --system && service procps force-reload && deb-systemd-invoke restart procps.service
 
-# Increase the maximum number of incoming connections
-net.core.somaxconn = 65535
+# =============================================================================
+# FIREWALL NFTABLES
+# =============================================================================
+echo -e "\n${CYAN}Configurando firewall nftables...${NC}"
 
-# Enable TCP SYN cookies to protect against SYN flood attacks
-net.ipv4.tcp_syncookies = 1
+# Install nftables if not present
+if ! command_exists nft; then
+    echo "Instalando nftables..."
+    apt install -y nftables
+fi
 
-# Adjust TCP buffer sizes for better throughput
-net.core.rmem_max = 16777216
-net.core.wmem_max = 16777216
-net.ipv4.tcp_rmem = 4096 87380 16777216
-net.ipv4.tcp_wmem = 4096 65536 16777216
+# Copy nftables configuration
+echo "Aplicando regras de firewall..."
+cp "$SCRIPT_DIR/nftables.conf" /etc/nftables.conf
 
-# Disable IP source routing
-net.ipv4.conf.all.accept_source_route = 0
-net.ipv4.conf.default.accept_source_route = 0
+# Apply firewall rules
+nft -f /etc/nftables.conf
 
-# Enable IP spoofing protection
-net.ipv4.conf.all.rp_filter = 1
-net.ipv4.conf.default.rp_filter = 1
+# Enable nftables on boot
+systemctl enable --now nftables
 
-# Disable ICMP redirects
-net.ipv4.conf.all.accept_redirects = 0
-net.ipv4.conf.default.accept_redirects = 0
-EOF
+echo -e "${GREEN}✓ Firewall nftables configurado com sucesso!${NC}"
+echo "  - SSH (22): Rate limited (10 conexões/minuto por IP)"
+echo "  - HTTP (80): Aberta"
+echo "  - HTTPS (443): Aberta (TCP + UDP para HTTP/3)"
+echo "  - ICMP: Ping com rate limiting"
+echo "  - Policy: DROP input/forward, ACCEPT output"
 
-# Apply the changes
-sysctl -p 
+# Show active rules summary
+echo -e "\nRegras ativas:"
+nft list ruleset | grep -E "^table|chain|policy" | head -20

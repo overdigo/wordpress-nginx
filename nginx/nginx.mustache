@@ -44,6 +44,11 @@ server {
     listen [::]:443 ssl;
     server_name {{DOMAIN}};
 
+    # Deny illegal Host headers
+    if ($host !~* ^{{DOMAIN}}$ ) {
+        return 444;
+    }
+
     access_log /var/log/nginx/{{DOMAIN}}.access.log rt_cache buffer=512k flush=1m;
     error_log /var/log/nginx/{{DOMAIN}}.error.log error;
 
@@ -371,32 +376,73 @@ server {
         try_files $uri $uri/ /index.php?$query_string;
     }
 }
-    # subdomains redirect
-    server {
-        listen                  443 ssl;
-        listen                  [::]:443 ssl;
-        server_name             *.{{DOMAIN}};
+# www to non-www redirect (HTTPS)
+# HSTS Preload requires: serve HSTS header on www before redirecting
+server {
+    listen                  443 ssl;
+    listen                  [::]:443 ssl;
+    server_name             www.{{DOMAIN}};
 
-        http2 on;
+    http2 on;
 
-        # SSL
-        ssl_certificate /etc/nginx/ssl/{{DOMAIN}}.crt;
-        ssl_certificate_key /etc/nginx/ssl/{{DOMAIN}}.key;
-        return 301 https://{{DOMAIN}}$request_uri;
+    # Deny illegal Host headers
+    if ($host !~* ^www\.{{DOMAIN}}$ ) {
+        return 444;
     }
 
-    # HTTP redirect
-    server {
-        listen      80;
-        listen      [::]:80;
-        server_name .{{DOMAIN}};
+    # SSL
+    ssl_certificate /etc/nginx/ssl/{{DOMAIN}}.crt;
+    ssl_certificate_key /etc/nginx/ssl/{{DOMAIN}}.key;
 
-        # ACME-challenge
-        location ^~ /.well-known/acme-challenge/ {
-            root /var/www/_letsencrypt;
-        }
+    # HSTS header must be served on www before redirect
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
 
-        location / {
-            return 301 https://{{DOMAIN}}$request_uri;
-        }
+    return 301 https://{{DOMAIN}}$request_uri;
+}
+
+# Subdomains redirect (HTTPS)
+server {
+    listen                  443 ssl;
+    listen                  [::]:443 ssl;
+    server_name             *.{{DOMAIN}};
+
+    http2 on;
+
+    # Deny illegal Host headers (any subdomain except www which has its own block)
+    if ($host !~* ^.*\.{{DOMAIN}}$ ) {
+        return 444;
     }
+
+    # SSL
+    ssl_certificate /etc/nginx/ssl/{{DOMAIN}}.crt;
+    ssl_certificate_key /etc/nginx/ssl/{{DOMAIN}}.key;
+
+    # HSTS header for subdomains
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+
+    return 301 https://{{DOMAIN}}$request_uri;
+}
+
+# HTTP to HTTPS redirect
+# HSTS Preload requires: redirect to HTTPS of the SAME host first
+server {
+    listen      80;
+    listen      [::]:80;
+    server_name {{DOMAIN}} www.{{DOMAIN}} *.{{DOMAIN}};
+
+    # Deny illegal Host headers
+    if ($host !~* ^({{DOMAIN}}|www\.{{DOMAIN}}|.*\.{{DOMAIN}})$ ) {
+        return 444;
+    }
+
+    # ACME-challenge
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/_letsencrypt;
+    }
+
+    # Redirect to HTTPS of the SAME host (not directly to canonical)
+    # This allows each host to serve its own HSTS header
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}

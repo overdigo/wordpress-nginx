@@ -286,8 +286,10 @@ wp plugin install nginx-helper --activate --allow-root
 wp plugin update --all --allow-root
 
 # Set permalink structure to /%postname%/
-wp rewrite structure '/%postname%/' --allow-root
-wp rewrite flush --hard --allow-root
+# Using wp option update for more reliable permalink setting
+wp option update permalink_structure '/%postname%/' --path="$SITE_ROOT" --allow-root
+wp rewrite structure '/%postname%/' --path="$SITE_ROOT" --allow-root
+wp rewrite flush --hard --path="$SITE_ROOT" --allow-root
 
 # Set up a cron job to run WordPress cron tasks every 5 minutes
 (crontab -l -u www-data 2>/dev/null; echo "*/5 * * * * /usr/local/bin/wp cron event run --due-now --path=$SITE_ROOT --allow-root") | crontab -u www-data -
@@ -298,7 +300,10 @@ mkdir -p /etc/nginx/ssl
 if [ ! -f "/etc/nginx/ssl/$DOMAIN.crt" ]; then
     echo "Gerando certificado SSL autoassinado para $DOMAIN..."
     openssl ecparam -name prime256v1 -out ecparam.pem
-    openssl req -x509 -nodes -days 365 -newkey ec:ecparam.pem -keyout /etc/nginx/ssl/$DOMAIN.key -out /etc/nginx/ssl/$DOMAIN.crt
+    openssl req -x509 -nodes -days 365 -newkey ec:ecparam.pem \
+        -keyout /etc/nginx/ssl/$DOMAIN.key \
+        -out /etc/nginx/ssl/$DOMAIN.crt \
+        -subj "/C=BR/ST=State/L=City/O=Organization/CN=$DOMAIN"
     rm ecparam.pem
 fi
       
