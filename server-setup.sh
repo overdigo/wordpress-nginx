@@ -279,6 +279,12 @@ ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
 cp "$SCRIPT_DIR/nginx/fastcgi.conf" /etc/nginx/fastcgi.conf
 cp "$SCRIPT_DIR/nginx/snippets/fastcgi-php.conf" /etc/nginx/snippets/fastcgi-php.conf
 
+# Download 8G Firewall (advanced security rules for Nginx)
+echo "Baixando 8G Firewall..."
+wget -q -O /etc/nginx/conf.d/8g-firewall.conf https://github.com/t18d/nG-SetEnvIf/raw/refs/heads/develop/8g-firewall.conf
+wget -q -O /etc/nginx/snippets/8g.conf https://github.com/t18d/nG-SetEnvIf/raw/refs/heads/develop/8g.conf
+echo "8G Firewall instalado com sucesso!"
+
 # Install PHP if not already installed
 if ! command_exists php; then
   echo "Installing PHP $PHP_VERSION..."

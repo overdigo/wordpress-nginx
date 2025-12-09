@@ -64,6 +64,9 @@ server {
     # SEÇÃO 1: SECURITY HEADERS & METHOD RESTRICTION
     # ============================================================================
     
+    # 8G Firewall - Advanced security rules
+    include snippets/8g.conf;
+    
     add_header X-XSS-Protection          "1; mode=block" always;
     add_header X-Content-Type-Options    "nosniff" always;
     add_header Referrer-Policy           "no-referrer-when-downgrade" always;
@@ -418,6 +421,9 @@ server {
 
     http2 on;
 
+    # 8G Firewall - Advanced security rules
+    include snippets/8g.conf;
+
     # Deny illegal Host headers
     if ($host !~* ^www\.{{DOMAIN}}$ ) {
         return 444;
@@ -441,6 +447,9 @@ server {
 
     http2 on;
 
+    # 8G Firewall - Advanced security rules
+    include snippets/8g.conf;
+
     # Deny illegal Host headers (any subdomain except www which has its own block)
     if ($host !~* ^.*\.{{DOMAIN}}$ ) {
         return 444;
@@ -462,6 +471,9 @@ server {
     listen      80;
     listen      [::]:80;
     server_name {{DOMAIN}} www.{{DOMAIN}} *.{{DOMAIN}};
+
+    # 8G Firewall - Advanced security rules
+    include snippets/8g.conf;
 
     # Deny illegal Host headers
     if ($host !~* ^({{DOMAIN}}|www\.{{DOMAIN}}|.*\.{{DOMAIN}})$ ) {
