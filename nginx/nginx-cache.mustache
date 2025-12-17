@@ -1,0 +1,489 @@
+upstream php{{PHP_VERSION_NO_DOT}}_get {
+    least_conn;
+    server unix:/run/php/php{{PHP_VERSION}}-fpm-visitor-get-1.sock;
+    server unix:/run/php/php{{PHP_VERSION}}-fpm-visitor-get-2.sock;
+    keepalive 10;
+}
+
+upstream php{{PHP_VERSION_NO_DOT}}_other {
+    server unix:/run/php/php{{PHP_VERSION}}-fpm-visitor-other.sock;
+    keepalive 2;
+}
+
+upstream php{{PHP_VERSION_NO_DOT}}_admin {
+    server unix:/run/php/php{{PHP_VERSION}}-fpm-admin.sock;
+    keepalive 1;
+}
+
+# ============================================================================
+# MAP: REQUEST METHOD TO UPSTREAM - Coloque no contexto http
+# ============================================================================
+
+map $request_method $request_method_lower {
+    GET     get;      # Pool otimizado com 2 workers (leitura)
+    default other;    # POST e HEAD (escrita/modificação)
+}
+
+# Define map variables for WebP and AVIF support
+map $http_accept $webp_suffix {
+    default "";
+    "~*webp" ".webp";
+}
+
+map $http_accept $avif_suffix {
+    default "";
+    "~*avif" ".avif";
+}
+
+# ============================================================================
+# SERVER BLOCK - Seu virtual host
+# ============================================================================
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name {{DOMAIN}};
+
+    # Deny illegal Host headers
+    if ($host !~* ^{{DOMAIN}}$ ) {
+        return 444;
+    }
+
+    access_log /var/log/nginx/{{DOMAIN}}.access.log rt_cache buffer=512k flush=1m;
+    error_log /var/log/nginx/{{DOMAIN}}.error.log error;
+
+    http2 on;
+
+    ssl_certificate /etc/nginx/ssl/{{DOMAIN}}.crt;
+    ssl_certificate_key /etc/nginx/ssl/{{DOMAIN}}.key;
+
+    root {{SITE_ROOT}};
+    index index.php;
+
+    # ============================================================================
+    # SEÇÃO 1: SECURITY HEADERS & METHOD RESTRICTION
+    # ============================================================================
+    
+    # 8G Firewall - Advanced security rules
+    include snippets/8g.conf;
+    
+    add_header X-XSS-Protection          "1; mode=block" always;
+    add_header X-Content-Type-Options    "nosniff" always;
+    add_header Referrer-Policy           "no-referrer-when-downgrade" always;
+    add_header Permissions-Policy        "interest-cohort=()" always;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+    
+    # Clickjacking Protection
+    add_header X-Frame-Options           "SAMEORIGIN" always;
+    
+    # Content Security Policy - WordPress compatible
+    # Note: Adjust 'unsafe-inline' and 'unsafe-eval' based on your plugins
+    add_header Content-Security-Policy   "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https:; font-src 'self' data: https:; connect-src 'self' https:; frame-ancestors 'self'; form-action 'self'; base-uri 'self'; object-src 'none';" always;
+    
+    # Cross-Origin Policies
+    add_header Cross-Origin-Opener-Policy   "same-origin" always;
+    add_header Cross-Origin-Resource-Policy "same-origin" always;
+
+    # Restrict methods
+    if ($request_method !~ ^(GET|POST|HEAD)$) {
+        return 444;
+    }
+
+    # Block legacy HTTP/1.0 and HTTP/0.9 requests (commonly used by malicious bots/scanners)
+    if ($server_protocol = HTTP/1.0) {
+        return 444;
+    }
+    if ($server_protocol = HTTP/0.9) {
+        return 444;
+    }
+
+    # Brotli compression
+    brotli            on;
+    brotli_comp_level 1;
+    brotli_types      text/plain text/css text/xml application/json application/javascript application/rss+xml application/atom+xml image/svg+xml;
+
+    # ============================================================================
+    # SEÇÃO 2: FASTCGI CACHE (HIGH PERFORMANCE)
+    # ============================================================================
+    # FastCGI cache settings - compatível com nginx-helper plugin
+    # Purge via: wp nginx-helper purge ou automaticamente ao salvar posts
+    
+    # Include cache location rules
+    include snippets/fastcgi-cache-location.conf;
+    
+    # Header para debug (mostra HIT, MISS, BYPASS)
+    add_header X-FastCGI-Cache $upstream_cache_status;
+    
+    # ============================================================================
+    # SEÇÃO 2.1: CACHE PURGE ENDPOINT (para nginx-helper)
+    # ============================================================================
+    # Restrito a localhost para segurança
+    
+    location ~ /purge(/.*) {
+        # Apenas permite purge de localhost
+        allow 127.0.0.1;
+        allow ::1;
+        deny all;
+        
+        fastcgi_cache_purge WORDPRESS "$scheme$request_method$host$1";
+    }
+    
+    # ============================================================================
+    # SEÇÃO 2.2: DDOS PROTECTION & SECURITY BLOCKS
+    # ============================================================================
+    
+    # Global rate limit - catches aggressive scrapers/bots (100 req/sec per IP)
+    limit_req zone=global burst=50 nodelay;
+    
+    # Security rules (MAP-based pattern matching)
+    include snippets/secure.conf;
+
+    # ============================================================================
+    # SEÇÃO 3: STATIC FILES - ARQUIVOS ESTÁTICOS (ALTA PERFORMANCE)
+    # ============================================================================
+
+    # Favicon (try custom upload first)
+    location = /favicon.ico {
+        try_files /wp-content/uploads/fbrfg/favicon.ico $uri $uri/ /index.php?$args @empty_gif;
+        access_log off;
+        log_not_found off;
+        expires max;
+    }
+    
+    location @empty_gif {
+        empty_gif;
+    }
+
+    # Robots.txt
+    location = /robots.txt {
+        try_files $uri $uri/ /index.php?$args @robots;
+        access_log off;
+        log_not_found off;
+    }
+    
+    location @robots {
+        return 200 "User-agent: *\nDisallow: /wp-admin/\nAllow: /wp-admin/admin-ajax.php\n";
+    }
+
+    # Well-known paths
+    location /.well-known/acme-challenge/ {
+        alias /var/www/html/.well-known/acme-challenge/;
+        allow all;
+        auth_basic off;
+    }
+    
+    location /.well-known/traffic-advice {
+        types { } default_type "application/trafficadvice+json; charset=utf-8";
+        return 200 "[{\n  \"user_agent\": \"prefetch-proxy\",\n  \"google_prefetch_proxy_eap\": {\n    \"fraction\": 1.0\n  }\n}]";
+        allow all;
+    }
+
+    # Cache CSS & JS files
+    location ~* \.(?:css(\.map)?|js(\.map)?)$ {
+        add_header Access-Control-Allow-Origin "*";
+        add_header Cache-Control "public, no-transform";
+        access_log off;
+        log_not_found off;
+        expires 1y;
+    }
+
+    # Cache media files
+    location ~* \.(ogg|ogv|svg|svgz|eot|otf|woff|woff2|ttf|m4a|mp4|ttf|rss|atom|jpe?g|gif|cur|heic|png|tiff|ico|webm|mp3|aac|tgz|doc|xls|exe|ppt|tar|mid|midi|wav|bmp|rtf|swf|webp|json|webmanifest|cast)$ {
+        add_header Access-Control-Allow-Origin "*";
+        add_header Cache-Control "public, no-transform";
+        access_log off;
+        log_not_found off;
+        expires max;
+    }
+
+    # ============================================================================
+    # SEÇÃO 4: WORDPRESS SPECIFIC STATIC LOCATIONS
+    # ============================================================================
+
+    # Uploads directory with WebP/AVIF support
+    location /wp-content/uploads {
+        # Block dangerous files first
+        location ~* \.(?:s?html?|php[3-7]?(?:-fpm)?|js|swf|gz|log|zip|tar|rar|xz)$ {
+            deny all;
+            access_log off;
+            log_not_found off;
+        }
+        
+        # Block PHP in subfolders
+        location ~* /.*\.php$ {
+            deny all;
+        }
+        
+        # WebP/AVIF for images
+        location ~ \.(png|jpe?g)$ {
+            add_header Vary "Accept-Encoding";
+            add_header Access-Control-Allow-Origin "*";
+            add_header Cache-Control "public, no-transform";
+            access_log off;
+            log_not_found off;
+            expires max;
+            try_files $uri$avif_suffix $uri$webp_suffix $uri =404;
+        }
+    }
+
+    # EWWW Image Optimizer plugin
+    location /wp-content/plugins/ewww-image-optimizer/images {
+        location ~ \.(png|jpe?g)$ {
+            add_header Vary "Accept-Encoding";
+            add_header Access-Control-Allow-Origin "*";
+            add_header Cache-Control "public, no-transform";
+            access_log off;
+            log_not_found off;
+            expires max;
+            try_files $uri$avif_suffix $uri$webp_suffix $uri =404;
+        }
+        
+        location ~ \.php$ {
+            deny all;
+        }
+    }
+
+    # Cache directory
+    location /wp-content/cache {
+        location ~* \.(?:css(\.map)?|js(\.map)?|.html)$ {
+            add_header Access-Control-Allow-Origin "*";
+            access_log off;
+            log_not_found off;
+            expires 1y;
+        }
+        
+        location ~ \.php$ {
+            deny all;
+        }
+    }
+
+    # WordPress SEO plugin exception
+    location ~* ^/wp-content/plugins/wordpress-seo(?:-premium)?/css/main-sitemap\.xsl$ {}
+
+    # Deny all other wp-content/plugins access
+    location ~ ^/wp-content/plugins {
+        deny all;
+    }
+
+    # Protect Easy Digital Downloads
+    location ~ ^/wp-content/uploads/edd/(.*?)\.zip$ {
+        rewrite / permanent;
+    }
+
+    # ============================================================================
+    # SEÇÃO 5: PHP PROCESSING - RATE LIMITED ENDPOINTS
+    # ============================================================================
+
+    # Block user enumeration via ?author=N
+    if ($args ~* "author=\d+") {
+        return 403;
+    }
+
+    # xmlrpc.php (Jetpack whitelist + rate limit) - sempre POST
+    location = /xmlrpc.php {
+        allow 122.248.245.244/32;
+        allow 54.217.201.243/32;
+        allow 54.232.116.4/32;
+        allow 192.0.80.0/20;
+        allow 192.0.96.0/20;
+        allow 192.0.112.0/20;
+        allow 195.234.108.0/22;
+        deny all;
+        
+        access_log off;
+        log_not_found off;
+        limit_req zone=two burst=1 nodelay;
+        
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass php{{PHP_VERSION_NO_DOT}}_other;  # POST sempre
+        fastcgi_keep_conn on;
+    }
+
+    # wp-login.php (rate limited) - GET (form) e POST (auth)
+    location = /wp-login.php {
+        # Strict rate limiting for login: 1 req/sec, burst of 3 for legitimate retries
+        limit_req zone=strict burst=3 nodelay;
+        
+        include snippets/fastcgi-php.conf;
+        
+        # GET -> exibir formulário (leitura)
+        # POST -> autenticação (escrita)
+        fastcgi_pass php{{PHP_VERSION_NO_DOT}}_$request_method_lower;
+        fastcgi_keep_conn on;
+    }
+
+    # admin-ajax.php (rate limited) - GET e POST
+    location = /wp-admin/admin-ajax.php {
+        # API rate limit for AJAX: 5 req/sec with burst
+        limit_req zone=api burst=20 nodelay;
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass php{{PHP_VERSION_NO_DOT}}_$request_method_lower;
+        fastcgi_keep_conn on;
+    }
+
+    # REST API rate limiting and user enumeration protection
+    location ^~ /wp-json/ {
+        # Block user enumeration endpoints
+        location ~* ^/wp-json/wp/v2/users {
+            # Only allow authenticated requests (will return 401 for anonymous)
+            # Or completely block public access
+            return 403;
+        }
+        
+        # API rate limit for REST: 5 req/sec with burst
+        limit_req zone=api burst=15 nodelay;
+        
+        try_files $uri $uri/ /index.php?$args;
+    }
+
+    # wp-cron.php (rate limited) - sempre GET
+    location = /wp-cron.php {
+        # Search/heavy operations rate limit for cron
+        limit_req zone=search burst=2 nodelay;
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass php{{PHP_VERSION_NO_DOT}}_get;  # GET sempre
+        fastcgi_keep_conn on;
+    }
+
+    # TinyMCE - sempre GET
+    location = /wp-includes/js/tinymce/wp-tinymce.php {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass php{{PHP_VERSION_NO_DOT}}_get;  # GET sempre
+        fastcgi_keep_conn on;
+    }
+
+    # ============================================================================
+    # SEÇÃO 6: WP-ADMIN DIRECTORY (POOL DEDICADO)
+    # ============================================================================
+
+    location /wp-admin/ {
+        try_files $uri $uri/ /index.php?$args;
+
+        location ~ \.php$ {
+            fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+            include fastcgi_params;
+            fastcgi_pass php{{PHP_VERSION_NO_DOT}}_admin;  # Pool dedicado admin
+            fastcgi_keep_conn on;
+        }
+    }
+
+    # ============================================================================
+    # SEÇÃO 6.5: SECURE TOOLS DIRECTORY
+    # ============================================================================
+
+    location ^~ /{{SECURE_DIR}}/ {
+        auth_basic "Restricted Area";
+        auth_basic_user_file /etc/nginx/htpasswd/{{DOMAIN}}_{{SECURE_DIR}};
+
+        location ~ \.php$ {
+            include snippets/fastcgi-php.conf;
+            fastcgi_pass php{{PHP_VERSION_NO_DOT}}_admin;
+            fastcgi_keep_conn on;
+        }
+    }
+
+    # ============================================================================
+    # SEÇÃO 7: GENERAL PHP HANDLER & FALLBACK (COM CACHE)
+    # ============================================================================
+
+    # General PHP handler - separa GET de POST/HEAD automaticamente
+    # FastCGI cache ativado com bypass inteligente
+    location ~ \.php$ {
+        try_files $uri =404;
+        fastcgi_param SCRIPT_FILENAME $document_root/index.php;
+        include fastcgi_params;
+        
+        # GET -> pool com 2 workers + least_conn (leitura rápida)
+        # POST/HEAD -> pool separado (escrita/modificação)
+        fastcgi_pass php{{PHP_VERSION_NO_DOT}}_$request_method_lower;
+        fastcgi_keep_conn on;
+        
+        # FastCGI Cache - já configurado via include snippets/fastcgi-cache-location.conf
+        # Bypass é automático para POST, usuários logados, WooCommerce, etc.
+    }
+
+    # Index.php fallback (must be last)
+    # Cache ativado para páginas do WordPress
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+}
+# www to non-www redirect (HTTPS)
+# HSTS Preload requires: serve HSTS header on www before redirecting
+server {
+    listen                  443 ssl;
+    listen                  [::]:443 ssl;
+    server_name             www.{{DOMAIN}};
+
+    http2 on;
+
+    # 8G Firewall - Advanced security rules
+    include snippets/8g.conf;
+
+    # Deny illegal Host headers
+    if ($host !~* ^www\.{{DOMAIN}}$ ) {
+        return 444;
+    }
+
+    # SSL
+    ssl_certificate /etc/nginx/ssl/{{DOMAIN}}.crt;
+    ssl_certificate_key /etc/nginx/ssl/{{DOMAIN}}.key;
+
+    # HSTS header must be served on www before redirect
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+
+    return 301 https://{{DOMAIN}}$request_uri;
+}
+
+# Subdomains redirect (HTTPS)
+server {
+    listen                  443 ssl;
+    listen                  [::]:443 ssl;
+    server_name             *.{{DOMAIN}};
+
+    http2 on;
+
+    # 8G Firewall - Advanced security rules
+    include snippets/8g.conf;
+
+    # Deny illegal Host headers (any subdomain except www which has its own block)
+    if ($host !~* ^.*\.{{DOMAIN}}$ ) {
+        return 444;
+    }
+
+    # SSL
+    ssl_certificate /etc/nginx/ssl/{{DOMAIN}}.crt;
+    ssl_certificate_key /etc/nginx/ssl/{{DOMAIN}}.key;
+
+    # HSTS header for subdomains
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+
+    return 301 https://{{DOMAIN}}$request_uri;
+}
+
+# HTTP to HTTPS redirect
+# HSTS Preload requires: redirect to HTTPS of the SAME host first
+server {
+    listen      80;
+    listen      [::]:80;
+    server_name {{DOMAIN}} www.{{DOMAIN}} *.{{DOMAIN}};
+
+    # 8G Firewall - Advanced security rules
+    include snippets/8g.conf;
+
+    # Deny illegal Host headers
+    if ($host !~* ^({{DOMAIN}}|www\.{{DOMAIN}}|.*\.{{DOMAIN}})$ ) {
+        return 444;
+    }
+
+    # ACME-challenge
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/_letsencrypt;
+    }
+
+    # Redirect to HTTPS of the SAME host (not directly to canonical)
+    # This allows each host to serve its own HSTS header
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
