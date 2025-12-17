@@ -275,7 +275,11 @@ define('WP_POST_REVISIONS', 10);\\
 define('MEDIA_TRASH', true);\\
 define('EMPTY_TRASH_DAYS', 15);\\
 define('WP_AUTO_UPDATE_CORE', 'minor');\\
-define('DISABLE_WP_CRON', true);" $SITE_ROOT/wp-config.php
+define('DISABLE_WP_CRON', true);\\
+\\
+/* Cookie Security Settings */\\
+define('FORCE_SSL_ADMIN', true);\\
+define('COOKIE_DOMAIN', '$DOMAIN');" $SITE_ROOT/wp-config.php
 
 wp theme update --all --allow-root
 wp plugin deactivate akismet --allow-root

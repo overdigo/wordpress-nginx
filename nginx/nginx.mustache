@@ -72,9 +72,28 @@ server {
     add_header Referrer-Policy           "no-referrer-when-downgrade" always;
     add_header Permissions-Policy        "interest-cohort=()" always;
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+    
+    # Clickjacking Protection
+    add_header X-Frame-Options           "SAMEORIGIN" always;
+    
+    # Content Security Policy - WordPress compatible
+    # Note: Adjust 'unsafe-inline' and 'unsafe-eval' based on your plugins
+    add_header Content-Security-Policy   "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https:; font-src 'self' data: https:; connect-src 'self' https:; frame-ancestors 'self'; form-action 'self'; base-uri 'self'; object-src 'none';" always;
+    
+    # Cross-Origin Policies
+    add_header Cross-Origin-Opener-Policy   "same-origin" always;
+    add_header Cross-Origin-Resource-Policy "same-origin" always;
 
     # Restrict methods
     if ($request_method !~ ^(GET|POST|HEAD)$) {
+        return 444;
+    }
+
+    # Block legacy HTTP/1.0 and HTTP/0.9 requests (commonly used by malicious bots/scanners)
+    if ($server_protocol = HTTP/1.0) {
+        return 444;
+    }
+    if ($server_protocol = HTTP/0.9) {
         return 444;
     }
 
@@ -84,100 +103,14 @@ server {
     brotli_types      text/plain text/css text/xml application/json application/javascript application/rss+xml application/atom+xml image/svg+xml;
 
     # ============================================================================
-    # SEÇÃO 2: SECURITY BLOCKS - BLOQUEIOS DE SEGURANÇA (EXECUTAM PRIMEIRO)
+    # SEÇÃO 2: DDOS PROTECTION & SECURITY BLOCKS
     # ============================================================================
     
-    # Block malicious cookies (XSS patterns - normal and URL-encoded)
-    # %3C = <, %3E = >, %27 = ', %22 = "
-    if ($http_cookie ~* "(<|%3C).*script.*(>|%3E)") {
-        return 403;
-    }
-    if ($http_cookie ~* "(javascript|vbscript|expression|onload|onerror|onclick|onmouseover)(\s*:|%3A)") {
-        return 403;
-    }
-    if ($http_cookie ~* "(document\.(cookie|write|location)|window\.(location|open))") {
-        return 403;
-    }
-    if ($http_cookie ~* "(eval|alert|confirm|prompt)\s*\(") {
-        return 403;
-    }
-
-    # Block malicious query strings (XSS patterns)
-    if ($query_string ~* "(<|%3C).*script.*(>|%3E)") {
-        return 403;
-    }
-    if ($query_string ~* "(javascript|vbscript|expression)(\s*:|%3A)") {
-        return 403;
-    }
-
-    # Block malicious request body patterns in args
-    if ($args ~* "(eval|base64_encode|base64_decode)\s*\(") {
-        return 403;
-    }
-
-    # Block suspicious patterns in URL
-    location ~* "(base64_encode)(.*)(\()" { deny all; }
-    location ~* "(eval\()" { deny all; }
-    location ~* "(127\.0\.0\.1)" { deny all; }
-    location ~* "([a-z0-9]{2000})" { deny all; }
-    location ~* "(javascript\:)(.*)(\;)" { deny all; }
-    location ~* "(GLOBALS|REQUEST)(=|\[|%)" { deny all; }
-    location ~* "(<|%3C).*script.*(>|%3)" { deny all; }
-    location ~ "(\\|\.\.\.|\.\./|~|`|<|>|\|)" { deny all; }
-    location ~* "(boot\.ini|etc/passwd|self/environ)" { deny all; }
-    location ~* "(thumbs?(_editor|open)?|tim(thumb)?)\.php" { deny all; }
-    location ~* "(\'|\")(.*)(drop|insert|md5|select|union)" { deny all; }
-    location ~* "(https?|ftp|php):/" { deny all; }
-    location ~* "(=\\\'|=\\%27|/\\\'/?)\." { deny all; }
-    location ~ "(\{0\}|\(/\(|\.\.\.|\+\+\+|\\\"\\\")" { deny all; }
-    location ~ "(~|`|<|>|:|;|%|\\|\s|\{|\}|\[|\]|\|)" { deny all; }
-    location ~* "/(=|\$&|_mm|(wp-)?config\.|cgi-|etc/passwd|muieblack)" { deny all; }
-
-    # Deny backup extensions & log files
-    location ~* "\.(old|orig|original|php#|php~|php_bak|save|swo|aspx?|tpl|sh|bash|bak?|cfg|cgi|dll|exe|git|hg|ini|jsp|log|mdb|out|sql|svn|swp|tar|rdf|gz|zip|bz2|7z|pem|asc|conf|dump)$" {
-        deny all;
-    }
-
-    # Return 403 for readme/license files
-    location ~* "/(^$|readme|license|example|README|LEGALNOTICE|INSTALLATION|CHANGELOG)\.(txt|html|md)" {
-        deny all;
-    }
-
-    # Deny hidden files (except .well-known)
-    location ~ /\.(?!well-known\/) {
-        deny all;
-    }
-
-    # WordPress: deny sensitive files
-    location ~* ^/(?:wp-links-opml\.php|wp-config\.php|wp-config-sample\.php)$ {
-        deny all;
-    }
-
-    # Block WordPress installation script (prevent reinstall attacks)
-    location = /wp-admin/install.php {
-        deny all;
-    }
+    # Global rate limit - catches aggressive scrapers/bots (100 req/sec per IP)
+    limit_req zone=global burst=50 nodelay;
     
-    location = /wp-config.txt {
-        deny all;
-        access_log off;
-        log_not_found off;
-    }
-
-    # WordPress: deny wp-content, wp-includes php files
-    location ~* ^/(?:wp-content|wp-includes)/.*\.php$ {
-        deny all;
-    }
-
-    # Deny PHP in uploads directory
-    location ~* /(?:uploads|files)/.*\.php$ {
-        deny all;
-    }
-
-    # Mitigate DoS with WordPress script concatenation
-    location ~ \/wp-admin\/load-(scripts|styles).php {
-        deny all;
-    }
+    # Security rules (MAP-based pattern matching)
+    include snippets/secure.conf;
 
     # ============================================================================
     # SEÇÃO 3: STATIC FILES - ARQUIVOS ESTÁTICOS (ALTA PERFORMANCE)
@@ -315,6 +248,11 @@ server {
     # SEÇÃO 5: PHP PROCESSING - RATE LIMITED ENDPOINTS
     # ============================================================================
 
+    # Block user enumeration via ?author=N
+    if ($args ~* "author=\d+") {
+        return 403;
+    }
+
     # xmlrpc.php (Jetpack whitelist + rate limit) - sempre POST
     location = /xmlrpc.php {
         allow 122.248.245.244/32;
@@ -337,7 +275,9 @@ server {
 
     # wp-login.php (rate limited) - GET (form) e POST (auth)
     location = /wp-login.php {
-        limit_req zone=one burst=1 nodelay;
+        # Strict rate limiting for login: 1 req/sec, burst of 3 for legitimate retries
+        limit_req zone=strict burst=3 nodelay;
+        
         include snippets/fastcgi-php.conf;
         
         # GET -> exibir formulário (leitura)
@@ -346,9 +286,34 @@ server {
         fastcgi_keep_conn on;
     }
 
+    # admin-ajax.php (rate limited) - GET e POST
+    location = /wp-admin/admin-ajax.php {
+        # API rate limit for AJAX: 5 req/sec with burst
+        limit_req zone=api burst=20 nodelay;
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass php{{PHP_VERSION_NO_DOT}}_$request_method_lower;
+        fastcgi_keep_conn on;
+    }
+
+    # REST API rate limiting and user enumeration protection
+    location ^~ /wp-json/ {
+        # Block user enumeration endpoints
+        location ~* ^/wp-json/wp/v2/users {
+            # Only allow authenticated requests (will return 401 for anonymous)
+            # Or completely block public access
+            return 403;
+        }
+        
+        # API rate limit for REST: 5 req/sec with burst
+        limit_req zone=api burst=15 nodelay;
+        
+        try_files $uri $uri/ /index.php?$args;
+    }
+
     # wp-cron.php (rate limited) - sempre GET
     location = /wp-cron.php {
-        limit_req zone=two burst=1 nodelay;
+        # Search/heavy operations rate limit for cron
+        limit_req zone=search burst=2 nodelay;
         include snippets/fastcgi-php.conf;
         fastcgi_pass php{{PHP_VERSION_NO_DOT}}_get;  # GET sempre
         fastcgi_keep_conn on;

@@ -1,0 +1,15 @@
+[Unit]
+Description=Network Performance Tuning for High-Performance HTTP
+Documentation=https://talawah.io/blog/extreme-http-performance-tuning-one-point-two-million/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/network-tuning.sh all
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
