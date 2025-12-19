@@ -267,6 +267,10 @@ sudo nginx -t
 sudo systemctl restart nginx
 sudo systemctl restart php8.4-fpm
 sudo systemctl restart redis-server
+sudo systemctl restart mysql
+sudo systemctl restart mariadb
+# todos
+sudo systemctl restart nginx php8.4-fpm redis-server mysql mariadb
 ```
 
 ### Logs
