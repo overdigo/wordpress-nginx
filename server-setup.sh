@@ -278,6 +278,11 @@ cp "$SCRIPT_DIR/nginx/default" /etc/nginx/sites-available/default
 ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
 cp "$SCRIPT_DIR/nginx/fastcgi.conf" /etc/nginx/fastcgi.conf
 cp "$SCRIPT_DIR/nginx/snippets/fastcgi-php.conf" /etc/nginx/snippets/fastcgi-php.conf
+cp "$SCRIPT_DIR/nginx/snippets/secure.conf" /etc/nginx/snippets/secure.conf
+cp "$SCRIPT_DIR/nginx/snippets/secure-maps.conf" /etc/nginx/snippets/secure-maps.conf
+cp "$SCRIPT_DIR/nginx/snippets/ddos-protection.conf" /etc/nginx/snippets/ddos-protection.conf
+cp "$SCRIPT_DIR/nginx/snippets/fastcgi-cache.conf" /etc/nginx/snippets/fastcgi-cache.conf
+cp "$SCRIPT_DIR/nginx/snippets/fastcgi-cache-location.conf" /etc/nginx/snippets/fastcgi-cache-location.conf
 
 # Download 8G Firewall (advanced security rules for Nginx)
 echo "Baixando 8G Firewall..."
