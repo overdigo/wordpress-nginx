@@ -327,13 +327,13 @@ fi
 sed -i "/\/\* That's all, stop editing! Happy publishing. \*\//i \\
 $WP_CONFIG_DEFINES" $SITE_ROOT/wp-config.php
 
-wp theme update --all --allow-root
-wp plugin deactivate akismet --allow-root
-wp plugin delete akismet --allow-root
-wp plugin deactivate hello --allow-root
-wp plugin delete hello --allow-root
-wp plugin install nginx-helper --activate --allow-root
-wp plugin update --all --allow-root
+wp theme update --all --path="$SITE_ROOT" --allow-root
+wp plugin deactivate akismet --path="$SITE_ROOT" --allow-root
+wp plugin delete akismet --path="$SITE_ROOT" --allow-root
+wp plugin deactivate hello --path="$SITE_ROOT" --allow-root
+wp plugin delete hello --path="$SITE_ROOT" --allow-root
+wp plugin install nginx-helper --activate --path="$SITE_ROOT" --allow-root
+wp plugin update --all --path="$SITE_ROOT" --allow-root
 
 # Configurar nginx-helper se cache habilitado
 if [ "$ENABLE_FASTCGI_CACHE" = "yes" ]; then

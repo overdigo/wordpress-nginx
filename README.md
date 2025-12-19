@@ -15,7 +15,7 @@ Conjunto completo de scripts para instalação e otimização de WordPress com N
 
 ### ⚡ Performance
 - **FastCGI Cache em RAM** (`/dev/shm`) - Cache de páginas para máxima velocidade
-- **Redis Object Cache** - Cache de objetos PHP para WordPress
+- **DragonflyDB Object Cache** - 25x mais rápido que Redis, multi-threaded
 - **Network Performance Tuning** - Otimizações baseadas em "Extreme HTTP Performance Tuning"
 - **Sysctl otimizado** - Mais de 100 parâmetros de kernel ajustados (TCP BBR, buffers, swappiness, etc.)
 - **Busy Polling** - Reduz latência em ~5-10%
@@ -87,7 +87,7 @@ Este script instalará e configurará:
 - **Nginx** (oficial ou compilado)
 - **MySQL** ou **MariaDB** (configuração otimizada por RAM)
 - **PHP-FPM** (versão escolhida)
-- **Redis** (para object cache)
+- **Cache Server** (DragonflyDB, Valkey ou Redis - você escolhe)
 - **Firewall NFTables** 
 - **Sysctl otimizado** para performance
 
@@ -111,7 +111,7 @@ Cada site terá:
 - Banco de dados dedicado
 - Configuração Nginx específica
 - SSL com certificado autoassinado (ou use Certbot depois)
-- FastCGI Cache e Redis Object Cache (se habilitado)
+- FastCGI Cache e Object Cache (se habilitado)
 
 ---
 
@@ -149,6 +149,70 @@ O script instala automaticamente o plugin **Nginx Helper** configurado para:
 - Purge automático ao atualizar posts/páginas
 - Purge ao atualizar menus/widgets
 - Cache path: `/dev/shm/nginx-cache`
+
+---
+
+## 🚀 Cache Server (Object Cache)
+
+O `server-setup.sh` permite escolher entre **3 opções de cache server**:
+
+### Opções Disponíveis:
+
+**1. DragonflyDB** ⭐ **(RECOMENDADO)**
+- 25x mais rápido que Redis
+- 30% menos uso de RAM
+- Multi-threaded (usa todos os cores)
+- Latência ~0.3ms
+
+**2. Valkey**
+- Fork open-source do Redis
+- Performance igual ao Redis
+- Licença BSD (totalmente livre)
+- Latência ~1ms
+
+**3. Redis**
+- Mais maduro e estável
+- Single-threaded
+- Latência ~1ms
+- Amplamente testado
+
+### Tabela Comparativa:
+
+| Métrica | Redis | DragonflyDB |
+|---------|-------|-------------|
+| **Threading** | Single-threaded | Multi-threaded |
+| **Performance** | Baseline | **25x mais rápido** |
+| **Uso de RAM** | Baseline | **30% menos** |
+| **Latência** | ~1ms | **~0.3ms** |
+| **Compatibilidade** | 100% | 100% Redis API |
+
+### Características:
+- **Multi-threaded** - Aproveita todos os cores da CPU
+- **Altamente otimizado** - Menos uso de memória
+- **100% compatível** com Redis API
+- **Plugin redis-cache** funciona normalmente
+
+### Comandos úteis:
+
+```bash
+# Verificar status
+systemctl status dragonfly
+
+# Ver estatísticas em tempo real
+redis-cli --stat
+
+# Monitorar comandos
+redis-cli MONITOR
+
+# Ver informações de memória
+redis-cli INFO memory
+
+# Reiniciar serviço
+sudo systemctl restart dragonfly
+```
+
+### Configuração no WordPress:
+O plugin **redis-cache** é instalado e configurado automaticamente quando o FastCGI Cache está habilitado.
 
 ---
 
@@ -266,11 +330,11 @@ sudo nginx -t
 ```bash
 sudo systemctl restart nginx
 sudo systemctl restart php8.4-fpm
-sudo systemctl restart redis-server
+sudo systemctl restart dragonfly
 sudo systemctl restart mysql
 sudo systemctl restart mariadb
 # todos
-sudo systemctl restart nginx php8.4-fpm redis-server mysql mariadb
+sudo systemctl restart nginx php8.4-fpm dragonfly mysql mariadb
 ```
 
 ### Logs
@@ -308,10 +372,10 @@ tail -f /var/log/php8.4-fpm.log
                               │
                               ▼
 ┌──────────────────────────────┐    ┌─────────────────────────┐
-│         PHP-FPM              │    │         Redis           │
-│  ┌──────────┐ ┌──────────┐   │    │    (Object Cache)       │
-│  │  www     │ │  admin   │   │◄──►│                         │
-│  │  pool    │ │  pool    │   │    │                         │
+│         PHP-FPM              │    │      DragonflyDB        │
+│  ┌──────────┐ ┌──────────┐   │    │   (Object Cache)        │
+│  │  www     │ │  admin   │   │◄──►│   25x faster than       │
+│  │  pool    │ │  pool    │   │    │   Redis, multi-thread   │
 │  └──────────┘ └──────────┘   │    └─────────────────────────┘
 └──────────────────────────────┘
                               │

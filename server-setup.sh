@@ -111,6 +111,52 @@ select_database() {
   fi
 }
 
+# Função para selecionar Cache Server
+select_cache_server() {
+  echo -e "\n${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  echo -e "${BOLD}💾 Cache Server (Object Cache)${NC}"
+  echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  
+  # Verificar se já existe algum cache server instalado
+  if command_exists redis-server || command_exists dragonfly || command_exists valkey-server; then
+    echo -e "${GREEN}✓ Cache server já está instalado${NC}"
+    CACHE_CHOICE="0"
+    CACHE_DESCRIPTION="Já instalado"
+    return
+  fi
+  
+  echo ""
+  echo -e "${BOLD}Escolha o servidor de cache:${NC}"
+  echo ""
+  echo "1) DragonflyDB ${GREEN}(RECOMENDADO)${NC}"
+  echo "   • 25x mais rápido que Redis"
+  echo "   • 30% menos uso de RAM"
+  echo "   • Multi-threaded (usa todos os cores)"
+  echo "   • Latência ~0.3ms"
+  echo ""
+  echo "2) Valkey"
+  echo "   • Fork open-source do Redis"
+  echo "   • Performance igual ao Redis"
+  echo "   • Licença BSD (totalmente livre)"
+  echo ""
+  echo "3) Redis"
+  echo "   • Mais maduro e estável"
+  echo "   • Single-threaded"
+  echo "   • Latência ~1ms"
+  echo ""
+  echo "4) Nenhum (pular instalação)"
+  echo ""
+  read -p "Escolha (1, 2, 3 ou 4): " CACHE_CHOICE
+  
+  case $CACHE_CHOICE in
+    1) CACHE_DESCRIPTION="DragonflyDB ${GREEN}(25x mais rápido)${NC}" ;;
+    2) CACHE_DESCRIPTION="Valkey (Open Source)" ;;
+    3) CACHE_DESCRIPTION="Redis (Estável)" ;;
+    4) CACHE_DESCRIPTION="Nenhum"; CACHE_CHOICE="0" ;;
+    *) CACHE_DESCRIPTION="Inválido"; CACHE_CHOICE="" ;;
+  esac
+}
+
 # Função para exibir resumo das configurações
 show_summary() {
   echo -e "\n${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -119,6 +165,7 @@ show_summary() {
   echo -e "  ${BOLD}1)${NC} PHP:      ${CYAN}$PHP_VERSION${NC}"
   echo -e "  ${BOLD}2)${NC} Nginx:    ${CYAN}$NGINX_DESCRIPTION${NC}"
   echo -e "  ${BOLD}3)${NC} Database: ${CYAN}$DB_DESCRIPTION${NC}"
+  echo -e "  ${BOLD}4)${NC} Cache:    $CACHE_DESCRIPTION"
   echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 }
 
@@ -138,6 +185,10 @@ collect_configuration() {
       select_database
     fi
     
+    if [ -z "$CACHE_CHOICE" ]; then
+      select_cache_server
+    fi
+    
     # Exibe resumo
     show_summary
     
@@ -147,6 +198,7 @@ collect_configuration() {
     echo "  1) Editar versão do PHP"
     echo "  2) Editar escolha do Nginx"
     echo "  3) Editar escolha do Database"
+    echo "  4) Editar escolha do Cache Server"
     echo "  q) Cancelar e sair"
     read -p "Escolha: " CONFIRM_CHOICE
     
@@ -167,6 +219,10 @@ collect_configuration() {
         fi
         if [ "$DB_CHOICE" != "0" ] && [ -n "$DB_CHOICE" ] && [ -z "$DB_VERSION_CHOICE" ]; then
           echo -e "${RED}Erro: Versão do Database não definida${NC}"
+          continue
+        fi
+        if [ -z "$CACHE_CHOICE" ]; then
+          echo -e "${RED}Erro: Escolha do Cache Server inválida${NC}"
           continue
         fi
         
@@ -194,6 +250,15 @@ collect_configuration() {
           DB_VERSION_CHOICE=""
           DB_DESCRIPTION=""
           select_database
+        fi
+        ;;
+      4)
+        if command_exists redis-server || command_exists dragonfly || command_exists valkey-server; then
+          echo -e "${YELLOW}Cache server já está instalado, não pode ser alterado.${NC}"
+        else
+          CACHE_CHOICE=""
+          CACHE_DESCRIPTION=""
+          select_cache_server
         fi
         ;;
       q|Q)
@@ -648,6 +713,213 @@ if ! command_exists wp; then
   curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
   chmod +x wp-cli.phar
   mv wp-cli.phar /usr/local/bin/wp
+fi
+
+# =============================================================================
+# INSTALL CACHE SERVER (Redis, Valkey or DragonflyDB)
+# =============================================================================
+# Install cache server based on user selection
+# All three are compatible with redis-cache plugin for WordPress
+# =============================================================================
+
+if [ "$CACHE_CHOICE" != "0" ] && [ "$CACHE_CHOICE" != "4" ]; then
+  case $CACHE_CHOICE in
+    1)
+      # =============================================================================
+      # DRAGONFLYDB - High-performance Redis alternative
+      # =============================================================================
+      if ! command_exists dragonfly; then
+        echo -e "\n${CYAN}Installing DragonflyDB (Redis-compatible, ultra-fast cache)...${NC}"
+        
+        # Install dependencies
+        apt-get install -y redis-tools curl
+        
+        # Detect architecture
+        ARCH=$(uname -m)
+        case $ARCH in
+          x86_64)
+            DRAGONFLY_ARCH="x86_64"
+            ;;
+          aarch64|arm64)
+            DRAGONFLY_ARCH="aarch64"
+            ;;
+          *)
+            echo -e "${RED}Arquitetura não suportada: $ARCH${NC}"
+            echo "DragonflyDB suporta apenas x86_64 e aarch64"
+            echo "Instalando Redis como fallback..."
+            apt-get install -y redis-server
+            systemctl enable redis-server
+            systemctl start redis-server
+            continue
+            ;;
+        esac
+        
+        # Get latest version
+        echo "Baixando DragonflyDB para $DRAGONFLY_ARCH..."
+        DRAGONFLY_VERSION=$(curl -s https://api.github.com/repos/dragonflydb/dragonfly/releases/latest | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
+        
+        if [ -z "$DRAGONFLY_VERSION" ]; then
+          DRAGONFLY_VERSION="1.14.0"  # Fallback to known stable version
+          echo "Usando versão padrão: v$DRAGONFLY_VERSION"
+        else
+          echo "Versão detectada: v$DRAGONFLY_VERSION"
+        fi
+        
+        # Download binary
+        DOWNLOAD_URL="https://github.com/dragonflydb/dragonfly/releases/download/v${DRAGONFLY_VERSION}/dragonfly-${DRAGONFLY_ARCH}.tar.gz"
+        
+        wget -q --show-progress "$DOWNLOAD_URL" -O /tmp/dragonfly.tar.gz || {
+          echo -e "${RED}Erro ao baixar DragonflyDB${NC}"
+          echo "URL tentada: $DOWNLOAD_URL"
+          echo "Instalando Redis como fallback..."
+          apt-get install -y redis-server
+          systemctl enable redis-server
+          systemctl start redis-server
+          continue
+        }
+        
+        # Extract and install
+        tar -xzf /tmp/dragonfly.tar.gz -C /tmp/
+        mv /tmp/dragonfly-${DRAGONFLY_ARCH} /usr/local/bin/dragonfly
+        chmod +x /usr/local/bin/dragonfly
+        rm /tmp/dragonfly.tar.gz
+        
+        # Create dragonfly user if not exists
+        if ! id -u dragonfly &>/dev/null; then
+          useradd -r -s /bin/false dragonfly
+        fi
+        
+        # Create data directory
+        mkdir -p /var/lib/dragonfly
+        chown dragonfly:dragonfly /var/lib/dragonfly
+        
+        # Create systemd service for DragonflyDB
+        cat <<'EOF' > /etc/systemd/system/dragonfly.service
+[Unit]
+Description=DragonflyDB - A modern in-memory datastore
+Documentation=https://www.dragonflydb.io/docs
+After=network.target
+
+[Service]
+Type=simple
+User=dragonfly
+Group=dragonfly
+ExecStart=/usr/local/bin/dragonfly --logtostderr --dir /var/lib/dragonfly --bind 127.0.0.1 --port 6379
+Restart=always
+RestartSec=3
+LimitNOFILE=65536
+
+# Performance and security settings
+Nice=-5
+CPUSchedulingPolicy=fifo
+CPUSchedulingPriority=99
+IOSchedulingClass=realtime
+IOSchedulingPriority=0
+
+[Install]
+WantedBy=multi-user.target
+EOF
+        
+        # Enable and start service
+        systemctl daemon-reload
+        systemctl enable dragonfly
+        systemctl start dragonfly
+        
+        # Wait for service to start
+        sleep 3
+        
+        # Test connection
+        if redis-cli -p 6379 PING 2>/dev/null | grep -q "PONG"; then
+          echo -e "${GREEN}✓ DragonflyDB installed and running!${NC}"
+          echo "  Port: 6379 (Redis-compatible)"
+          echo "  Performance: 25x faster than Redis"
+          echo "  Memory: 30% more efficient"
+          echo "  Multi-threaded: Uses all CPU cores"
+        else
+          echo -e "${YELLOW}⚠ DragonflyDB installed but not responding on port 6379${NC}"
+          echo "  Check status with: systemctl status dragonfly"
+        fi
+      else
+        echo -e "${GREEN}✓ DragonflyDB already installed${NC}"
+      fi
+      ;;
+      
+    2)
+      # =============================================================================
+      # VALKEY - Open-source Redis fork
+      # =============================================================================
+      if ! command_exists valkey-server; then
+        echo -e "\n${CYAN}Installing Valkey (Open-Source Redis fork)...${NC}"
+        
+        # Add Valkey repository
+        curl -fsSL https://packages.valkey.io/gpg | gpg --dearmor -o /usr/share/keyrings/valkey-archive-keyring.gpg
+        echo "deb [signed-by=/usr/share/keyrings/valkey-archive-keyring.gpg] https://packages.valkey.io/deb $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/valkey.list
+        
+        apt-get update
+        apt-get install -y valkey
+        
+        # Configure Valkey
+        sed -i 's/^# maxmemory <bytes>/maxmemory 256mb/' /etc/valkey/valkey.conf
+        sed -i 's/^# maxmemory-policy noeviction/maxmemory-policy allkeys-lru/' /etc/valkey/valkey.conf
+        
+        # Enable and start service
+        systemctl enable valkey
+        systemctl start valkey
+        
+        # Wait for service to start
+        sleep 2
+        
+        # Test connection
+        if redis-cli -p 6379 PING 2>/dev/null | grep -q "PONG"; then
+          echo -e "${GREEN}✓ Valkey installed and running!${NC}"
+          echo "  Port: 6379 (Redis-compatible)"
+          echo "  License: BSD (fully open-source)"
+          echo "  Performance: Equal to Redis"
+        else
+          echo -e "${YELLOW}⚠ Valkey installed but not responding on port 6379${NC}"
+          echo "  Check status with: systemctl status valkey"
+        fi
+      else
+        echo -e "${GREEN}✓ Valkey already installed${NC}"
+      fi
+      ;;
+      
+    3)
+      # =============================================================================
+      # REDIS - Traditional stable option
+      # =============================================================================
+      if ! command_exists redis-server; then
+        echo -e "\n${CYAN}Installing Redis (Stable cache server)...${NC}"
+        
+        apt-get install -y redis-server
+        
+        # Configure Redis
+        sed -i 's/^# maxmemory <bytes>/maxmemory 256mb/' /etc/redis/redis.conf
+        sed -i 's/^# maxmemory-policy noeviction/maxmemory-policy allkeys-lru/' /etc/redis/redis.conf
+        
+        # Enable and start service
+        systemctl enable redis-server
+        systemctl start redis-server
+        
+        # Wait for service to start
+        sleep 2
+        
+        # Test connection
+        if redis-cli -p 6379 PING 2>/dev/null | grep -q "PONG"; then
+          echo -e "${GREEN}✓ Redis installed and running!${NC}"
+          echo "  Port: 6379"
+          echo "  Most mature and stable option"
+        else
+          echo -e "${YELLOW}⚠ Redis installed but not responding on port 6379${NC}"
+          echo "  Check status with: systemctl status redis-server"
+        fi
+      else
+        echo -e "${GREEN}✓ Redis already installed${NC}"
+      fi
+      ;;
+  esac
+else
+  echo -e "\n${YELLOW}Cache server installation skipped${NC}"
 fi
 
 # Apply appropriate DB configuration based on system memory
