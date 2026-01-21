@@ -15,11 +15,11 @@ rlimit_core = 0
 decorate_workers_output = no
 clear_env = yes
 security.limit_extensions = .php
-catch_workers_output = yes
+catch_workers_output = no
 ping.path = /ping
 pm.status_path = /status
 
-php_admin_value[open_basedir] = "/var/www/:/usr/share/php/:/tmp/:/var/run/nginx-cache/:/dev/urandom:/dev/shm:/var/lib/php/sessions/"
+php_admin_value[open_basedir] = "/var/www/:/usr/share/php/:/var/run/nginx-cache/:/dev/urandom:/dev/shm:/var/lib/php/sessions/"
 
 ;; dynamic config
 ;pm = dynamic
