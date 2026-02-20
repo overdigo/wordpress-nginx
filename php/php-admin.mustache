@@ -12,7 +12,7 @@ pm.start_servers = 1
 pm.min_spare_servers = 1
 pm.max_spare_servers = 4
 pm.max_spawn_rate = 2
-pm.max_requests = 1000
+pm.max_requests = 100
 request_terminate_timeout = 600
 rlimit_files = 65535
 rlimit_core = 0
@@ -30,4 +30,4 @@ php_admin_value[max_execution_time] = 600
 php_admin_value[max_input_time] = 600
 php_admin_value[memory_limit] = 1024M
 
-php_admin_value[open_basedir] = "/var/www/:/usr/share/php/:/tmp/:/var/run/nginx-cache/:/dev/urandom:/dev/shm:/var/lib/php/sessions/" 
+php_admin_value[open_basedir] = "/var/www/:/usr/share/php/:/var/run/nginx-cache/:/dev/urandom:/dev/shm:/var/lib/php/sessions/" 
