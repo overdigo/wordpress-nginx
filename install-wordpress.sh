@@ -517,6 +517,16 @@ wget -q -O "$SITE_ROOT/$SECURE_DIR_NAME/adminer.php" https://www.adminer.org/lat
 echo "Baixando Opcache GUI..."
 wget -q -O "$SITE_ROOT/$SECURE_DIR_NAME/opcache.php" https://raw.githubusercontent.com/amnuts/opcache-gui/master/index.php
 
+# Copiar arquivo de preload do opcache se existir
+if [ -f "$SCRIPT_DIR/preload.php" ]; then
+    echo "Copiando arquivo de preload do opcache..."
+    cp "$SCRIPT_DIR/preload.php" "$SITE_ROOT/preload.php"
+    echo -e "${GREEN}✓ Arquivo preload.php copiado para $SITE_ROOT/preload.php${NC}"
+    echo "  Configure o opcache preload em: /etc/php/$PHP_VERSION/fpm/conf.d/99-custom.ini"
+    echo "  opcache.preload=/var/www/$DOMAIN/preload.php"
+    echo "  opcache.preload_user=www-data"
+fi
+
 # Set permissions
 chown -R www-data:www-data "$SITE_ROOT"
 find "$SITE_ROOT" -type d -exec chmod 755 {} \;

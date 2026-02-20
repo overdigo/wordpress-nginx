@@ -42,6 +42,9 @@ map $http_accept $avif_suffix {
 server {
     listen 443 ssl;
     listen [::]:443 ssl;
+    # Uncomment for Cloudflare Proxy mode
+    # listen 443 ssl proxy_protocol;
+    # listen [::]:443 ssl proxy_protocol;
     server_name {{DOMAIN}};
 
     # Deny illegal Host headers
@@ -49,7 +52,7 @@ server {
         return 444;
     }
 
-    access_log /var/log/nginx/{{DOMAIN}}.access.log rt_cache buffer=512k flush=1m;
+    access_log /var/log/nginx/{{DOMAIN}}.access.log main buffer=64k flush=10s;
     error_log /var/log/nginx/{{DOMAIN}}.error.log error;
 
     http2 on;
@@ -101,6 +104,19 @@ server {
     brotli            on;
     brotli_comp_level 1;
     brotli_types      text/plain text/css text/xml application/json application/javascript application/rss+xml application/atom+xml image/svg+xml;
+
+    # ============================================================================
+    # CLOUDFLARE CACHE HEADERS (Optional - uncomment when using Cloudflare)
+    # ============================================================================
+    # These headers control Cloudflare edge caching behavior
+    # CDN-Cache-Control: Cloudflare-specific, ignored by browsers
+    # Cf-Cache-Status: Added by Cloudflare (HIT, MISS, DYNAMIC, BYPASS)
+    #
+    # For HTML pages (handled by index.php):
+    # add_header CDN-Cache-Control "max-age=3600";
+    # add_header Cache-Control "public, max-age=0, s-maxage=3600, stale-while-revalidate=86400";
+    #
+    # See snippets/cloudflare-cache.conf for asset-specific rules
 
     # ============================================================================
     # SEÇÃO 2: DDOS PROTECTION & SECURITY BLOCKS

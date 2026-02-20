@@ -1,32 +1,43 @@
-server {
-    listen 80 default_server reuseport backlog=4096;
-    listen [::]:80 default_server reuseport backlog=4096;
+# ----Zona de rate limit(nível http{})----
+    limit_conn_zone $binary_remote_addr zone = default_conn: 5m;
+limit_req_zone  $binary_remote_addr zone = default_req: 10m rate = 2r / m;
+
+# ----Porta 80 default ----server {
+    listen 80 default_server reuseport backlog = 4096;
+    listen[::]: 80 default_server reuseport backlog = 4096;
     server_name _;
-    if ($request !~* ^(GET|POST|HEAD)) {
-        return 444;
-    }
-    location = /favicon.ico {
-        log_not_found off;
-        access_log off;
-        return 204;
-    }
+
+    # Timeouts agressivos
+    client_header_timeout 1s;
+    client_body_timeout   1s;
+    send_timeout          1s;
+    reset_timedout_connection on;
+
+    # Fecha conexão imediatamente com RST — sem esperar o cliente terminar de enviar
+    lingering_close off;
+
+    # Sem keepalive — cada scanner precisa abrir nova conexão TCP
+    keepalive_timeout 0;
+
+    # Reduz alocação de memória por conexão(padrão é 1k / 8k)
+    client_header_buffer_size    512;
+    large_client_header_buffers  2 512;
+
+    # Rate limits: retorna 444(drop silencioso) em vez de 503
+    limit_conn default_conn 1;
+    limit_conn_status 444;
+    limit_req  zone = default_req burst = 2 nodelay;
+    limit_req_status 444;
+
     return 444;
 }
-server {
-    listen 443 ssl default_server reuseport backlog=4096;
-    listen [::]:443 ssl default_server reuseport backlog=4096;
+
+# ----Porta 443 default ----
+    server {
+    listen 443 ssl default_server reuseport backlog = 4096;
+    listen[::]: 443 ssl default_server reuseport backlog = 4096;
     server_name _;
-    ssl_certificate /etc/nginx/ssl/selfsigned.crt;
-    ssl_certificate_key /etc/nginx/ssl/selfsigned.key;
-    ssl_stapling off;
-    ssl_stapling_verify off;
-    if ($request !~* ^(GET|POST|HEAD)) {
-        return 444;
-    }
-    location = /favicon.ico {
-        log_not_found off;
-        access_log off;
-        return 204;
-    }
-    return 444;
+
+    # Rejeita no handshake TLS — ssl_certificate NÃO é necessário aqui
+    ssl_reject_handshake on;
 }
